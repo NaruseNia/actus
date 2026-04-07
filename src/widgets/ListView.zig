@@ -206,6 +206,30 @@ pub fn render(self: *ListView, writer: anytype) !void {
     self.dirty = false;
 }
 
+/// Clear all rendered lines from the terminal. Call after the event loop
+/// ends to remove the list UI before printing results.
+pub fn cleanup(self: *ListView, writer: anytype) !void {
+    if (self.last_rendered_lines == 0) return;
+    // Move to top of block
+    if (self.cursor_line > 0) {
+        try Terminal.moveCursorUp(writer, @intCast(self.cursor_line));
+    }
+    // Clear every line
+    for (0..self.last_rendered_lines) |i| {
+        try Terminal.clearLine(writer);
+        if (i < self.last_rendered_lines - 1) {
+            try writer.writeAll("\n");
+        }
+    }
+    // Move back to top
+    if (self.last_rendered_lines > 1) {
+        try Terminal.moveCursorUp(writer, @intCast(self.last_rendered_lines - 1));
+    }
+    try Terminal.clearLine(writer);
+    self.last_rendered_lines = 0;
+    self.cursor_line = 0;
+}
+
 pub fn needsRender(self: *const ListView) bool {
     return self.dirty;
 }
