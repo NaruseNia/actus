@@ -25,9 +25,12 @@ pub fn main() !void {
     defer list_view.deinit();
 
     var app = try actus.App.init();
-    defer app.deinit();
+    errdefer app.deinit();
 
     try app.run(&list_view);
+
+    // Disable raw mode before printing so \n is interpreted normally by the terminal.
+    app.deinit();
 
     const stdout = std.fs.File.stdout();
 
