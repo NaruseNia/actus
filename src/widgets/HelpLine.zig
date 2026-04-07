@@ -3,6 +3,7 @@ const Event = @import("../event.zig").Event;
 const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
 const Style = @import("../Style.zig");
+const Theme = @import("../Theme.zig");
 
 const HelpLine = @This();
 
@@ -22,12 +23,14 @@ pub const Config = struct {
     bindings: []const Binding = &.{},
     /// Separator between bindings.
     separator: []const u8 = "   ",
-    /// Style applied to the key portion.
-    key_style: Style = Style.fg(.cyan),
-    /// Style applied to the action description.
-    action_style: Style = Style.fg(.bright_black),
-    /// Style applied to the separator.
-    separator_style: Style = Style.fg(.bright_black),
+    /// Style applied to the key portion. Overrides theme.accent when set.
+    key_style: ?Style = null,
+    /// Style applied to the action description. Overrides theme.muted when set.
+    action_style: ?Style = null,
+    /// Style applied to the separator. Overrides theme.muted when set.
+    separator_style: ?Style = null,
+    /// Theme providing default styles.
+    theme: Theme = Theme.default,
 };
 
 // -- State --
@@ -54,13 +57,17 @@ pub fn handleEvent(_: *HelpLine, _: Event) Widget.HandleResult {
 pub fn render(self: *HelpLine, writer: anytype) !void {
     try Terminal.clearLine(writer);
 
+    const k_style = self.config.key_style orelse self.config.theme.accent;
+    const a_style = self.config.action_style orelse self.config.theme.muted;
+    const s_style = self.config.separator_style orelse self.config.theme.muted;
+
     for (self.config.bindings, 0..) |binding, i| {
         if (i > 0) {
-            try self.config.separator_style.write(writer, self.config.separator);
+            try s_style.write(writer, self.config.separator);
         }
-        try self.config.key_style.write(writer, binding.key);
+        try k_style.write(writer, binding.key);
         try writer.writeAll(" ");
-        try self.config.action_style.write(writer, binding.action);
+        try a_style.write(writer, binding.action);
     }
 
     self.dirty = false;
@@ -141,6 +148,48 @@ test "setBindings marks dirty" {
     };
     hl.setBindings(new_bindings);
     try std.testing.expect(hl.needsRender());
+}
+
+test "render uses custom theme styles" {
+    var buf: [512]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+
+    const custom_theme = Theme{ .accent = Style.fg(.red), .muted = Style.fg(.green) };
+    var hl = HelpLine.init(.{
+        .bindings = &.{
+            .{ .key = "Enter", .action = "Select" },
+        },
+        .theme = custom_theme,
+    });
+
+    try hl.render(&writer);
+
+    const output = fbs.getWritten();
+    // red fg for key = \x1b[31m, green fg for action = \x1b[32m
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[31m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[32m") != null);
+}
+
+test "key_style overrides theme" {
+    var buf: [512]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+
+    var hl = HelpLine.init(.{
+        .bindings = &.{
+            .{ .key = "q", .action = "Quit" },
+        },
+        .key_style = Style.fg(.yellow),
+        .theme = Theme{ .accent = Style.fg(.red) },
+    });
+
+    try hl.render(&writer);
+
+    const output = fbs.getWritten();
+    // yellow fg = \x1b[33m, not red \x1b[31m
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[33m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[31m") == null);
 }
 
 test "render with custom separator" {
