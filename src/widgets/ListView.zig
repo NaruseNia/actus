@@ -190,6 +190,13 @@ pub fn render(self: *ListView, writer: anytype) !void {
         try Terminal.moveCursorUp(writer, @intCast(extra));
     }
 
+    // Position cursor on the filter input line for text entry
+    if (self.config.filterable and total_lines > 1) {
+        try Terminal.moveCursorUp(writer, @intCast(total_lines - 1));
+        const col = self.config.filter_prefix.len + self.filter_buffer.items.len;
+        try Terminal.moveCursorTo(writer, @intCast(col));
+    }
+
     self.last_rendered_lines = total_lines;
     self.dirty = false;
 }
