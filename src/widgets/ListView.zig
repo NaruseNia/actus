@@ -108,27 +108,11 @@ pub fn filterValue(self: *const ListView) []const u8 {
 
 /// Returns the default help-line bindings for the current state.
 /// Used by `WithHelpLine` to auto-populate the help line.
-pub fn helpBindings(self: *const ListView) []const HelpLine.Binding {
-    if (self.config.filterable and self.filter_buffer.items.len > 0) {
-        return &.{
-            .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
-            .{ .key = "Esc", .action = "Clear" },
-            .{ .key = "Enter", .action = "Select" },
-        };
-    }
-    if (self.config.filterable) {
-        return &.{
-            .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
-            .{ .key = "/", .action = "Filter" },
-            .{ .key = "Enter", .action = "Select" },
-            .{ .key = "Esc", .action = "Quit" },
-        };
-    }
+pub fn helpBindings(_: *const ListView) []const HelpLine.Binding {
     return &.{
-        .{ .key = "\xe2\x86\x91\xe2\x86\x93/jk", .action = "Navigate" },
-        .{ .key = "g/G", .action = "Top/Bottom" },
+        .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
+        .{ .key = "Esc", .action = "Clear" },
         .{ .key = "Enter", .action = "Select" },
-        .{ .key = "Esc", .action = "Quit" },
     };
 }
 
