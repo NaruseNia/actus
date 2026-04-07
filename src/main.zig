@@ -1,18 +1,87 @@
 const std = @import("std");
 const actus = @import("actus");
 
-pub fn main() !void {
-    runFilePickerDemo() catch |err| {
-        std.debug.print("Error: {}\n", .{err});
-        return err;
-    };
-}
+const demos = [_][]const u8{
+    "TextInput",
+    "TextInput (password)",
+    "ListView",
+    "ListView (filterable)",
+    "FilePicker",
+};
 
-fn runListViewDemo() !void {
+pub fn main() !void {
     var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
     defer _ = gpa_state.deinit();
     const allocator = gpa_state.allocator();
 
+    const stdout = std.fs.File.stdout();
+
+    // -- Demo selector --
+    var selector = actus.ListView.init(allocator, &demos, .{
+        .max_visible = 10,
+        .show_count = true,
+    });
+    defer selector.deinit();
+
+    var wrapped = actus.WithHelpLine(actus.ListView).init(&selector, .{});
+
+    {
+        var app = try actus.App.init();
+        errdefer app.deinit();
+        try app.run(&wrapped);
+        app.deinit();
+    }
+
+    // Clean up selector UI
+    var cleanup_buf: [actus.Terminal.render_buf_size]u8 = undefined;
+    var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
+    try wrapped.cleanup(cleanup_fbs.writer(), 1);
+    try stdout.writeAll(cleanup_fbs.getWritten());
+
+    if (selector.isCancelled()) {
+        try stdout.writeAll("Cancelled.\n");
+        return;
+    }
+
+    const selected = selector.selectedIndex() orelse return;
+
+    // -- Run selected demo --
+    switch (selected) {
+        0 => try runTextInputDemo(allocator, stdout, .{}),
+        1 => try runTextInputDemo(allocator, stdout, .{
+            .placeholder = "Enter password...",
+            .mask_char = '*',
+        }),
+        2 => try runListViewDemo(allocator, stdout, .{}),
+        3 => try runListViewDemo(allocator, stdout, .{
+            .filterable = true,
+            .filter_placeholder = "Type to filter...",
+        }),
+        4 => try runFilePickerDemo(allocator, stdout),
+        else => {},
+    }
+}
+
+fn runTextInputDemo(allocator: std.mem.Allocator, stdout: std.fs.File, config: actus.TextInput.Config) !void {
+    var ti = actus.TextInput.init(allocator, config);
+    defer ti.deinit();
+
+    var app = try actus.App.init();
+    errdefer app.deinit();
+    try app.run(&ti);
+    app.deinit();
+
+    try stdout.writeAll("\r\n");
+    if (ti.isConfirmed()) {
+        try stdout.writeAll("Input: ");
+        try stdout.writeAll(ti.value());
+        try stdout.writeAll("\n");
+    } else {
+        try stdout.writeAll("Cancelled.\n");
+    }
+}
+
+fn runListViewDemo(allocator: std.mem.Allocator, stdout: std.fs.File, config: actus.ListView.Config) !void {
     const items = [_][]const u8{
         "Apple",
         "Banana",
@@ -23,42 +92,31 @@ fn runListViewDemo() !void {
         "Grape",
     };
 
-    var list_view = actus.ListView.init(allocator, &items, .{
-        .max_visible = 5,
-        .filterable = true,
-        .show_count = true,
-        .filter_placeholder = "Type to filter...",
-    });
-    defer list_view.deinit();
+    var lv = actus.ListView.init(allocator, &items, config);
+    defer lv.deinit();
 
-    var wrapped = actus.WithHelpLine(actus.ListView).init(&list_view, .{});
+    var wrapped_lv = actus.WithHelpLine(actus.ListView).init(&lv, .{});
 
     var app = try actus.App.init();
     errdefer app.deinit();
-
-    try app.run(&wrapped);
+    try app.run(&wrapped_lv);
     app.deinit();
 
-    const stdout = std.fs.File.stdout();
-
-    var cleanup_buf: [4096]u8 = undefined;
+    var cleanup_buf: [actus.Terminal.render_buf_size]u8 = undefined;
     var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
-    try wrapped.cleanup(cleanup_fbs.writer(), 1);
+    try wrapped_lv.cleanup(cleanup_fbs.writer(), 1);
     try stdout.writeAll(cleanup_fbs.getWritten());
-    if (list_view.isCancelled()) {
+
+    if (lv.isCancelled()) {
         try stdout.writeAll("Cancelled.\n");
-    } else if (list_view.selectedItem()) |item| {
+    } else if (lv.selectedItem()) |item| {
         try stdout.writeAll("You selected: ");
         try stdout.writeAll(item);
         try stdout.writeAll("\n");
     }
 }
 
-fn runFilePickerDemo() !void {
-    var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer _ = gpa_state.deinit();
-    const allocator = gpa_state.allocator();
-
+fn runFilePickerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     var file_picker = actus.FilePicker.init(allocator, ".", .{
         .max_visible = 15,
         .filterable = true,
@@ -71,19 +129,16 @@ fn runFilePickerDemo() !void {
     });
     defer file_picker.deinit();
 
-    var wrapped = actus.WithHelpLine(actus.FilePicker).init(&file_picker, .{});
+    var wrapped_fp = actus.WithHelpLine(actus.FilePicker).init(&file_picker, .{});
 
     var app = try actus.App.init();
     errdefer app.deinit();
-
-    try app.run(&wrapped);
+    try app.run(&wrapped_fp);
     app.deinit();
 
-    const stdout = std.fs.File.stdout();
-
-    var cleanup_buf: [4096]u8 = undefined;
+    var cleanup_buf: [actus.Terminal.render_buf_size]u8 = undefined;
     var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
-    try wrapped.cleanup(cleanup_fbs.writer(), 1);
+    try wrapped_fp.cleanup(cleanup_fbs.writer(), 1);
     try stdout.writeAll(cleanup_fbs.getWritten());
 
     if (file_picker.isCancelled()) {

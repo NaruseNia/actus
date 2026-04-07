@@ -339,6 +339,14 @@ pub fn cleanup(self: *FilePicker, writer: anytype, extra_lines: u16) !void {
     self.cursor_line = 0;
 }
 
+pub fn layoutInfo(self: *const FilePicker) ?Widget.LayoutInfo {
+    if (self.last_rendered_lines == 0) return null;
+    return .{
+        .total_lines = self.last_rendered_lines,
+        .cursor_line = self.cursor_line,
+    };
+}
+
 pub fn needsRender(self: *const FilePicker) bool {
     return self.dirty;
 }
