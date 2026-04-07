@@ -5,6 +5,7 @@ const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
 const Style = @import("../Style.zig");
 const Theme = @import("../Theme.zig");
+const HelpLine = @import("HelpLine.zig");
 
 const FilePicker = @This();
 
@@ -145,6 +146,25 @@ pub fn isCancelled(self: *const FilePicker) bool {
 /// Returns the current directory path.
 pub fn currentPath(self: *const FilePicker) []const u8 {
     return self.current_path.items;
+}
+
+/// Returns the default help-line bindings for the current state.
+/// Used by `WithHelpLine` to auto-populate the help line.
+pub fn helpBindings(self: *const FilePicker) []const HelpLine.Binding {
+    if (self.config.filterable and self.filter_buffer.items.len > 0) {
+        return &.{
+            .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
+            .{ .key = "\xe2\x86\x90", .action = "Parent" },
+            .{ .key = "Esc", .action = "Clear" },
+            .{ .key = "Enter", .action = "Open/Select" },
+        };
+    }
+    return &.{
+        .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
+        .{ .key = "\xe2\x86\x90", .action = "Parent" },
+        .{ .key = "Esc", .action = "Cancel" },
+        .{ .key = "Enter", .action = "Open/Select" },
+    };
 }
 
 // -- Widget interface --
@@ -1167,4 +1187,59 @@ test "render with filterable" {
 
     const output = fbs.getWritten();
     try std.testing.expect(std.mem.indexOf(u8, output, "/ ") != null);
+}
+
+test "helpBindings default state" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{});
+    defer fp.deinit();
+
+    const bindings = fp.helpBindings();
+    try std.testing.expectEqual(@as(usize, 4), bindings.len);
+    try std.testing.expectEqualStrings("Cancel", bindings[2].action);
+}
+
+test "helpBindings with active filter shows Clear" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .filterable = true });
+    defer fp.deinit();
+
+    _ = fp.handleEvent(.{ .key = .{ .char = 'a' } });
+    const bindings = fp.helpBindings();
+    try std.testing.expectEqualStrings("Clear", bindings[2].action);
+}
+
+test "helpBindings after filter cleared shows Cancel" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .filterable = true });
+    defer fp.deinit();
+
+    _ = fp.handleEvent(.{ .key = .{ .char = 'a' } });
+    _ = fp.handleEvent(.{ .key = .escape }); // Clear filter
+    const bindings = fp.helpBindings();
+    try std.testing.expectEqualStrings("Cancel", bindings[2].action);
+}
+
+test "WithHelpLine(FilePicker) satisfies Widget interface" {
+    const WithHelpLine = @import("WithHelpLine.zig").WithHelpLine;
+    comptime Widget.assertIsWidget(WithHelpLine(FilePicker));
+}
+
+test "WithHelpLine(FilePicker) renders with help bindings" {
+    const WithHelpLine = @import("WithHelpLine.zig").WithHelpLine;
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{});
+    defer fp.deinit();
+
+    var w = WithHelpLine(FilePicker).init(&fp, .{});
+
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try w.render(&fbs.writer());
+
+    const output = fbs.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, "Navigate") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Parent") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Cancel") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "Open/Select") != null);
 }
