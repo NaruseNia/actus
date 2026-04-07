@@ -21,11 +21,13 @@ pub const Config = struct {
     /// Key-action pairs to display.
     bindings: []const Binding = &.{},
     /// Separator between bindings.
-    separator: []const u8 = " | ",
+    separator: []const u8 = "   ",
     /// Style applied to the key portion.
     key_style: Style = Style.fg(.cyan),
     /// Style applied to the action description.
     action_style: Style = Style.fg(.bright_black),
+    /// Style applied to the separator.
+    separator_style: Style = Style.fg(.bright_black),
 };
 
 // -- State --
@@ -54,7 +56,7 @@ pub fn render(self: *HelpLine, writer: anytype) !void {
 
     for (self.config.bindings, 0..) |binding, i| {
         if (i > 0) {
-            try writer.writeAll(self.config.separator);
+            try self.config.separator_style.write(writer, self.config.separator);
         }
         try self.config.key_style.write(writer, binding.key);
         try writer.writeAll(" ");
@@ -99,8 +101,8 @@ test "render writes bindings with styles and separators" {
     try std.testing.expect(std.mem.indexOf(u8, output, "Select") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "Esc") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "Quit") != null);
-    // Should contain the separator
-    try std.testing.expect(std.mem.indexOf(u8, output, " │ ") != null);
+    // Should contain the separator text (wrapped in style escapes)
+    try std.testing.expect(std.mem.indexOf(u8, output, " | ") != null);
     // Should not be dirty after render
     try std.testing.expect(!hl.needsRender());
 }
