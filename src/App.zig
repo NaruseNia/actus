@@ -81,9 +81,18 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     var fbs = std.io.fixedBufferStream(&buf);
     const writer = fbs.writer();
 
-    // Initial render
+    // Initial render: use \n to establish lines on the terminal.
     try Terminal.hideCursor(&writer);
-    try renderWithHelpLine(widget, help_line, &writer, &fbs);
+    const initial_info = try renderWidgetAndAnalyze(widget, &writer, &fbs);
+    const lines_below: u16 = @intCast(initial_info.max_row - initial_info.cursor_row);
+    // Use \n to scroll and create lines for the first time.
+    for (0..lines_below + 1) |_| {
+        try writer.writeAll("\n");
+    }
+    try help_line.render(&writer);
+    try Terminal.clearFromCursor(&writer);
+    try Terminal.moveCursorUp(&writer, lines_below + 1);
+    if (initial_info.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
     try Terminal.showCursor(&writer);
     try self.writeToStdout(fbs.getWritten());
     fbs.reset();
@@ -111,7 +120,15 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
 
         if (widget.needsRender() or help_line.needsRender()) {
             try Terminal.hideCursor(&writer);
-            try renderWithHelpLine(widget, help_line, &writer, &fbs);
+            const info = try renderWidgetAndAnalyze(widget, &writer, &fbs);
+            const below: u16 = @intCast(info.max_row - info.cursor_row);
+            // Re-render: lines already exist, use cursor movement instead of \n.
+            try Terminal.moveCursorDown(&writer, below + 1);
+            try writer.writeAll("\r");
+            try help_line.render(&writer);
+            try Terminal.clearFromCursor(&writer);
+            try Terminal.moveCursorUp(&writer, below + 1);
+            if (info.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
             try Terminal.showCursor(&writer);
             try self.writeToStdout(fbs.getWritten());
             fbs.reset();
@@ -122,43 +139,12 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     try self.writeToStdout("\r\n");
 }
 
-/// Render the widget, then the help line below it, then restore cursor.
-fn renderWithHelpLine(
-    widget: anytype,
-    help_line: anytype,
-    writer: anytype,
-    fbs: anytype,
-) !void {
-    // Record buffer position before widget render to measure output.
+/// Render the widget and return cursor tracking info.
+fn renderWidgetAndAnalyze(widget: anytype, writer: anytype, fbs: anytype) !CursorTracker {
     const before = fbs.pos;
     try widget.render(writer);
     const after = fbs.pos;
-
-    // Analyze the widget's output to find total lines and cursor row.
-    const widget_output = fbs.buffer[before..after];
-    const info = CursorTracker.analyze(widget_output);
-
-    // Move cursor from where the widget left it to one line past the
-    // bottom of the widget's rendered area, then draw the help line.
-    const lines_below_cursor = info.max_row - info.cursor_row;
-    for (0..lines_below_cursor) |_| {
-        try writer.writeAll("\n");
-    }
-    try writer.writeAll("\r\n");
-    try help_line.render(writer);
-
-    // Clear any leftover lines below the help line from a previous
-    // taller render (e.g. widget shrank due to filtering).
-    try Terminal.clearFromCursor(writer);
-
-    // Move cursor back to where the widget expects it.
-    const help_lines_below: u16 = @intCast(lines_below_cursor + 1);
-    try Terminal.moveCursorUp(writer, help_lines_below);
-
-    // Restore horizontal cursor position if the widget set one.
-    if (info.cursor_col) |col| {
-        try Terminal.moveCursorTo(writer, col);
-    }
+    return CursorTracker.analyze(fbs.buffer[before..after]);
 }
 
 /// Analyzes rendered bytes to track cursor row position.

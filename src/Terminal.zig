@@ -149,6 +149,11 @@ pub fn moveCursorUp(writer: anytype, n: u16) !void {
     try writer.print("\x1b[{d}A", .{n});
 }
 
+pub fn moveCursorDown(writer: anytype, n: u16) !void {
+    if (n == 0) return;
+    try writer.print("\x1b[{d}B", .{n});
+}
+
 pub fn clearFromCursor(writer: anytype) !void {
     try writer.writeAll("\x1b[J");
 }
