@@ -6,20 +6,42 @@ pub fn main() !void {
     defer _ = gpa_state.deinit();
     const allocator = gpa_state.allocator();
 
-    var text_input = actus.TextInput.init(allocator, .{
-        .placeholder = "Type your name...",
-        .max_length = 50,
+    const items = [_][]const u8{
+        "Apple",
+        "Banana",
+        "Cherry",
+        "Durian",
+        "Elderberry",
+        "Fig",
+        "Grape",
+    };
+
+    var list_view = actus.ListView.init(allocator, &items, .{
+        .max_visible = 5,
+        .filterable = true,
+        .show_count = true,
+        .filter_placeholder = "Type to filter...",
     });
-    defer text_input.deinit();
+    defer list_view.deinit();
 
     var app = try actus.App.init();
     defer app.deinit();
 
-    try app.run(&text_input);
+    try app.run(&list_view);
 
-    // Print the result after the loop ends
     const stdout = std.fs.File.stdout();
-    try stdout.writeAll("You entered: ");
-    try stdout.writeAll(text_input.value());
-    try stdout.writeAll("\n");
+
+    // Clean up the list UI before printing results.
+    // extra_lines=1 accounts for the "\r\n" that App.run() writes on exit.
+    var cleanup_buf: [4096]u8 = undefined;
+    var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
+    try list_view.cleanup(cleanup_fbs.writer(), 1);
+    try stdout.writeAll(cleanup_fbs.getWritten());
+    if (list_view.isCancelled()) {
+        try stdout.writeAll("Cancelled.\n");
+    } else if (list_view.selectedItem()) |item| {
+        try stdout.writeAll("You selected: ");
+        try stdout.writeAll(item);
+        try stdout.writeAll("\n");
+    }
 }

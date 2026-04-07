@@ -7,6 +7,7 @@ pub const Widget = @import("Widget.zig");
 pub const App = @import("App.zig");
 pub const Style = @import("Style.zig");
 pub const TextInput = @import("widgets/TextInput.zig");
+pub const ListView = @import("widgets/ListView.zig");
 
 test {
     _ = Terminal;
@@ -16,4 +17,5 @@ test {
     _ = Style;
     _ = App;
     _ = TextInput;
+    _ = ListView;
 }

@@ -144,6 +144,15 @@ pub fn clearLine(writer: anytype) !void {
     try writer.writeAll("\r\x1b[2K");
 }
 
+pub fn moveCursorUp(writer: anytype, n: u16) !void {
+    if (n == 0) return;
+    try writer.print("\x1b[{d}A", .{n});
+}
+
+pub fn clearFromCursor(writer: anytype) !void {
+    try writer.writeAll("\x1b[J");
+}
+
 // -- Tests --
 
 test "ANSI hideCursor writes correct escape" {
@@ -176,6 +185,30 @@ test "ANSI moveCursorTo column 0 writes col 1" {
     const writer = fbs.writer();
     try moveCursorTo(&writer, 0);
     try std.testing.expectEqualStrings("\x1b[1G", fbs.getWritten());
+}
+
+test "ANSI moveCursorUp writes correct escape" {
+    var buf: [32]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    try moveCursorUp(&writer, 3);
+    try std.testing.expectEqualStrings("\x1b[3A", fbs.getWritten());
+}
+
+test "ANSI moveCursorUp zero writes nothing" {
+    var buf: [32]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    try moveCursorUp(&writer, 0);
+    try std.testing.expectEqualStrings("", fbs.getWritten());
+}
+
+test "ANSI clearFromCursor writes correct escape" {
+    var buf: [32]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    try clearFromCursor(&writer);
+    try std.testing.expectEqualStrings("\x1b[J", fbs.getWritten());
 }
 
 test "ANSI moveCursorTo column 9 writes col 10" {
