@@ -21,11 +21,11 @@ pub const Config = struct {
     /// Key-action pairs to display.
     bindings: []const Binding = &.{},
     /// Separator between bindings.
-    separator: []const u8 = " │ ",
+    separator: []const u8 = " | ",
     /// Style applied to the key portion.
-    key_style: Style = Style.bold(),
+    key_style: Style = Style.fg(.cyan),
     /// Style applied to the action description.
-    action_style: Style = Style.dim(),
+    action_style: Style = Style.fg(.bright_black),
 };
 
 // -- State --

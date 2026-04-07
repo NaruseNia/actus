@@ -83,16 +83,16 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
 
     // Initial render: use \n to establish lines on the terminal.
     try Terminal.hideCursor(&writer);
-    const initial_info = try renderWidgetAndAnalyze(widget, &writer, &fbs);
-    const lines_below: u16 = @intCast(initial_info.max_row - initial_info.cursor_row);
+    try widget.render(&writer);
+    const initial = getWidgetLayout(widget, &fbs);
     // Use \n to scroll and create lines for the first time.
-    for (0..lines_below + 1) |_| {
+    for (0..initial.lines_below + 1) |_| {
         try writer.writeAll("\n");
     }
     try help_line.render(&writer);
     try Terminal.clearFromCursor(&writer);
-    try Terminal.moveCursorUp(&writer, lines_below + 1);
-    if (initial_info.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
+    try Terminal.moveCursorUp(&writer, initial.lines_below + 1);
+    if (initial.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
     try Terminal.showCursor(&writer);
     try self.writeToStdout(fbs.getWritten());
     fbs.reset();
@@ -120,15 +120,15 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
 
         if (widget.needsRender() or help_line.needsRender()) {
             try Terminal.hideCursor(&writer);
-            const info = try renderWidgetAndAnalyze(widget, &writer, &fbs);
-            const below: u16 = @intCast(info.max_row - info.cursor_row);
+            try widget.render(&writer);
+            const layout = getWidgetLayout(widget, &fbs);
             // Re-render: lines already exist, use cursor movement instead of \n.
-            try Terminal.moveCursorDown(&writer, below + 1);
+            try Terminal.moveCursorDown(&writer, layout.lines_below + 1);
             try writer.writeAll("\r");
             try help_line.render(&writer);
             try Terminal.clearFromCursor(&writer);
-            try Terminal.moveCursorUp(&writer, below + 1);
-            if (info.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
+            try Terminal.moveCursorUp(&writer, layout.lines_below + 1);
+            if (layout.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
             try Terminal.showCursor(&writer);
             try self.writeToStdout(fbs.getWritten());
             fbs.reset();
@@ -139,12 +139,38 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     try self.writeToStdout("\r\n");
 }
 
-/// Render the widget and return cursor tracking info.
-fn renderWidgetAndAnalyze(widget: anytype, writer: anytype, fbs: anytype) !CursorTracker {
-    const before = fbs.pos;
-    try widget.render(writer);
-    const after = fbs.pos;
-    return CursorTracker.analyze(fbs.buffer[before..after]);
+/// Layout info needed to position the help line below a widget.
+const WidgetLayout = struct {
+    /// Number of lines from the cursor to the bottom of the widget.
+    lines_below: u16,
+    /// Cursor column to restore, or null if not set.
+    cursor_col: ?u16,
+};
+
+/// Get widget layout after render. Prefers the widget's own fields
+/// (last_rendered_lines, cursor_line) over byte-level analysis, because
+/// CursorTracker can be fooled by cursor movements the widget makes
+/// to clear leftover lines from a previous taller render.
+fn getWidgetLayout(widget: anytype, fbs: anytype) WidgetLayout {
+    const WidgetT = @TypeOf(widget.*);
+    const has_rendered_lines = @hasField(WidgetT, "last_rendered_lines");
+    const has_cursor_line = @hasField(WidgetT, "cursor_line");
+
+    if (has_rendered_lines and has_cursor_line) {
+        // Widget reports its own height — use it directly.
+        const total = widget.last_rendered_lines;
+        const cursor_row = widget.cursor_line;
+        const bottom = if (total > 0) total - 1 else 0;
+        const lines_below: u16 = @intCast(bottom -| cursor_row);
+        // Scan the rendered output for the last \x1b[<N>G to find cursor column.
+        const col = CursorTracker.findLastColumn(fbs.getWritten());
+        return .{ .lines_below = lines_below, .cursor_col = col };
+    } else {
+        // Fallback: analyze the raw output bytes.
+        const info = CursorTracker.analyze(fbs.getWritten());
+        const lines_below: u16 = @intCast(info.max_row -| info.cursor_row);
+        return .{ .lines_below = lines_below, .cursor_col = info.cursor_col };
+    }
 }
 
 /// Analyzes rendered bytes to track cursor row position.
@@ -211,6 +237,33 @@ const CursorTracker = struct {
             .max_row = max_row,
             .cursor_col = col,
         };
+    }
+
+    /// Scan bytes for the last '\x1b[<N>G' and return the column (0-indexed).
+    fn findLastColumn(bytes: []const u8) ?u16 {
+        var col: ?u16 = null;
+        var i: usize = 0;
+        while (i < bytes.len) {
+            if (bytes[i] == '\x1b' and i + 1 < bytes.len and bytes[i + 1] == '[') {
+                i += 2;
+                var n: usize = 0;
+                var has_num = false;
+                while (i < bytes.len and bytes[i] >= '0' and bytes[i] <= '9') {
+                    n = n * 10 + (bytes[i] - '0');
+                    has_num = true;
+                    i += 1;
+                }
+                if (i < bytes.len) {
+                    if (bytes[i] == 'G') {
+                        col = if (has_num and n > 0) @intCast(n - 1) else 0;
+                    }
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+        return col;
     }
 
     // -- Tests --
