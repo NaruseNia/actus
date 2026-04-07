@@ -26,7 +26,7 @@ pub fn deinit(self: *App) void {
 pub fn run(self: *App, widget: anytype) !void {
     comptime Widget.assertIsWidget(@TypeOf(widget.*));
 
-    var buf: [4096]u8 = undefined;
+    var buf: [Terminal.render_buf_size]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
     const writer = fbs.writer();
 
@@ -78,7 +78,7 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     comptime Widget.assertIsWidget(@TypeOf(widget.*));
     comptime Widget.assertIsWidget(@TypeOf(help_line.*));
 
-    var buf: [4096]u8 = undefined;
+    var buf: [Terminal.render_buf_size]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
     const writer = fbs.writer();
 

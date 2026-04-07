@@ -6,6 +6,9 @@ const Terminal = @This();
 
 const is_windows = builtin.os.tag == .windows;
 
+/// Default buffer size for widget rendering.
+pub const render_buf_size: usize = 4096;
+
 /// Platform-specific original terminal state.
 const OriginalState = if (is_windows) WindowsState else posix.termios;
 

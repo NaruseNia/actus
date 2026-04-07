@@ -69,7 +69,7 @@ pub fn WithHelpLine(comptime ChildWidget: type) type {
             self.syncBindings();
 
             // Render child to an internal buffer so we can analyze layout
-            var child_buf: [4096]u8 = undefined;
+            var child_buf: [Terminal.render_buf_size]u8 = undefined;
             var child_fbs = std.io.fixedBufferStream(&child_buf);
             const child_writer = child_fbs.writer();
 
