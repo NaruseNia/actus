@@ -64,6 +64,14 @@ pub fn WithHelpLine(comptime ChildWidget: type) type {
             return self.child.needsRender() or self.help_line.needsRender();
         }
 
+        pub fn layoutInfo(self: *const Self) ?Widget.LayoutInfo {
+            if (self.last_rendered_lines == 0) return null;
+            return .{
+                .total_lines = self.last_rendered_lines,
+                .cursor_line = self.cursor_line,
+            };
+        }
+
         pub fn render(self: *Self, writer: anytype) !void {
             // Update bindings from child if no override is set
             self.syncBindings();

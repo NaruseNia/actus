@@ -11,6 +11,15 @@ pub const HandleResult = enum {
     done,
 };
 
+/// Layout information for widgets that track their own height and cursor position.
+/// Widgets can optionally implement `layoutInfo() ?LayoutInfo` to provide this.
+pub const LayoutInfo = struct {
+    /// Total number of lines the widget occupies.
+    total_lines: usize,
+    /// Row the cursor is on (0-indexed from widget start).
+    cursor_line: usize,
+};
+
 /// Comptime check: asserts that T has the required widget methods.
 /// A valid widget must implement:
 ///   - handleEvent(self: *T, ev: Event) HandleResult
