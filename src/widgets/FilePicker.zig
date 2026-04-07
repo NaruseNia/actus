@@ -238,10 +238,23 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
 
             const is_dir = entry.kind == .directory;
 
+            // Cursor prefix (not styled with meta)
             if (fi == self.selected) {
                 const sel_style = self.config.selected_style orelse self.config.theme.primary;
                 try sel_style.writeStart(writer);
                 try writer.writeAll(self.config.cursor);
+                try sel_style.writeEnd(writer);
+            } else {
+                try writer.writeAll(self.config.indent);
+            }
+
+            // Metadata columns (permissions, size) before filename
+            try self.renderEntryMeta(writer, entry);
+
+            // Filename
+            if (fi == self.selected) {
+                const sel_style = self.config.selected_style orelse self.config.theme.primary;
+                try sel_style.writeStart(writer);
                 try writer.writeAll(entry.name);
                 if (is_dir) try writer.writeAll("/");
                 try sel_style.writeEnd(writer);
@@ -251,14 +264,10 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
                 else
                     self.config.normal_style orelse self.config.theme.text;
                 try base_style.writeStart(writer);
-                try writer.writeAll(self.config.indent);
                 try writer.writeAll(entry.name);
                 if (is_dir) try writer.writeAll("/");
                 try base_style.writeEnd(writer);
             }
-
-            // Metadata columns
-            try self.renderEntryMeta(writer, entry);
             total_lines += 1;
         }
     }
@@ -630,8 +639,9 @@ fn renderEntryMeta(self: *const FilePicker, writer: anytype, entry: Entry) !void
 
     const m_style = self.config.meta_style orelse self.config.theme.muted;
 
+    // Fixed-width columns: "rwxr-xr-x " (10) + "  1.2K " (7)
+    // Each column ends with a space so the next column (or filename) aligns.
     if (self.config.show_permissions) {
-        try writer.writeAll("  ");
         if (entry.mode) |mode| {
             var perm_buf: [9]u8 = undefined;
             const perm = formatPermissions(mode, &perm_buf);
@@ -639,22 +649,24 @@ fn renderEntryMeta(self: *const FilePicker, writer: anytype, entry: Entry) !void
         } else {
             try m_style.write(writer, "---------");
         }
+        try writer.writeAll(" ");
     }
 
     if (self.config.show_size) {
-        try writer.writeAll("  ");
+        // Fixed 6-char wide size column, right-aligned
+        const size_width: usize = 6;
         if (entry.kind == .directory) {
-            try m_style.write(writer, "   -");
+            try m_style.write(writer, "     -");
         } else if (entry.size) |size| {
             var size_buf: [8]u8 = undefined;
             const size_str = formatSize(size, &size_buf);
-            // Right-align to 4 chars
-            const padding = if (size_str.len < 4) 4 - size_str.len else 0;
+            const padding = if (size_str.len < size_width) size_width - size_str.len else 0;
             for (0..padding) |_| try writer.writeAll(" ");
             try m_style.write(writer, size_str);
         } else {
-            try m_style.write(writer, "   ?");
+            try m_style.write(writer, "     ?");
         }
+        try writer.writeAll(" ");
     }
 }
 
