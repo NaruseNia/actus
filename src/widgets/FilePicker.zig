@@ -66,6 +66,9 @@ pub const Config = struct {
     filter_placeholder: []const u8 = "",
     /// Style for the filter placeholder. Overrides theme.muted when set.
     filter_placeholder_style: ?Style = null,
+    /// When set, only files with these extensions are shown. Directories are always shown.
+    /// Extensions should include the dot (e.g. &.{ ".zig", ".txt" }).
+    allowed_extensions: ?[]const []const u8 = null,
     /// When true, current_path and selectedPath return absolute paths.
     /// When false (default), paths stay relative as given to init.
     absolute_path: bool = false,
@@ -445,6 +448,14 @@ fn loadDirectory(self: *FilePicker) void {
             .file => .file,
             else => .unknown,
         };
+
+        // Extension filter: directories always pass, files must match
+        if (kind != .directory) {
+            if (self.config.allowed_extensions) |exts| {
+                if (!matchesExtension(fs_entry.name, exts)) continue;
+            }
+        }
+
         var entry = Entry{
             .name = undefined,
             .kind = kind,
@@ -651,6 +662,15 @@ fn prevCodepointLen(bytes: []const u8, pos: usize) usize {
         i -= 1;
     }
     return pos - i;
+}
+
+// -- Extension filter --
+
+fn matchesExtension(name: []const u8, exts: []const []const u8) bool {
+    for (exts) |ext| {
+        if (std.mem.endsWith(u8, name, ext)) return true;
+    }
+    return false;
 }
 
 // -- Metadata rendering --
@@ -1294,6 +1314,58 @@ test "absolute_path selectedPath returns absolute" {
     const path = fp.selectedPath().?;
     defer allocator.free(path);
     try std.testing.expect(path[0] == '/');
+}
+
+test "allowed_extensions filters files" {
+    const allocator = std.testing.allocator;
+    const exts = [_][]const u8{".zig"};
+    var fp = FilePicker.init(allocator, "src", .{ .allowed_extensions = &exts });
+    defer fp.deinit();
+
+    // All non-directory entries should end with .zig
+    for (fp.entries.items) |entry| {
+        if (entry.kind != .directory) {
+            try std.testing.expect(std.mem.endsWith(u8, entry.name, ".zig"));
+        }
+    }
+}
+
+test "allowed_extensions still shows directories" {
+    const allocator = std.testing.allocator;
+    const exts = [_][]const u8{".nonexistent"};
+    var fp = FilePicker.init(allocator, ".", .{ .allowed_extensions = &exts });
+    defer fp.deinit();
+
+    // Should have at least directories (src/, .zig-cache/, etc.)
+    var has_dir = false;
+    for (fp.entries.items) |entry| {
+        if (entry.kind == .directory) {
+            has_dir = true;
+            break;
+        }
+    }
+    try std.testing.expect(has_dir);
+}
+
+test "allowed_extensions null shows all files" {
+    const allocator = std.testing.allocator;
+    var fp_all = FilePicker.init(allocator, "src", .{ .allowed_extensions = null });
+    defer fp_all.deinit();
+
+    const exts = [_][]const u8{".zig"};
+    var fp_zig = FilePicker.init(allocator, "src", .{ .allowed_extensions = &exts });
+    defer fp_zig.deinit();
+
+    // Without filter should have >= entries than with filter
+    try std.testing.expect(fp_all.entries.items.len >= fp_zig.entries.items.len);
+}
+
+test "matchesExtension" {
+    const exts = [_][]const u8{ ".zig", ".txt" };
+    try std.testing.expect(matchesExtension("main.zig", &exts));
+    try std.testing.expect(matchesExtension("readme.txt", &exts));
+    try std.testing.expect(!matchesExtension("image.png", &exts));
+    try std.testing.expect(!matchesExtension("noext", &exts));
 }
 
 test "WithHelpLine(FilePicker) satisfies Widget interface" {
