@@ -5,6 +5,7 @@ const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
 const Style = @import("../Style.zig");
 const Theme = @import("../Theme.zig");
+const HelpLine = @import("HelpLine.zig");
 
 const ListView = @This();
 
@@ -103,6 +104,32 @@ pub fn isCancelled(self: *const ListView) bool {
 /// Returns the current filter text.
 pub fn filterValue(self: *const ListView) []const u8 {
     return self.filter_buffer.items;
+}
+
+/// Returns the default help-line bindings for the current state.
+/// Used by `WithHelpLine` to auto-populate the help line.
+pub fn helpBindings(self: *const ListView) []const HelpLine.Binding {
+    if (self.config.filterable and self.filter_buffer.items.len > 0) {
+        return &.{
+            .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
+            .{ .key = "Esc", .action = "Clear" },
+            .{ .key = "Enter", .action = "Select" },
+        };
+    }
+    if (self.config.filterable) {
+        return &.{
+            .{ .key = "\xe2\x86\x91\xe2\x86\x93", .action = "Navigate" },
+            .{ .key = "/", .action = "Filter" },
+            .{ .key = "Enter", .action = "Select" },
+            .{ .key = "Esc", .action = "Quit" },
+        };
+    }
+    return &.{
+        .{ .key = "\xe2\x86\x91\xe2\x86\x93/jk", .action = "Navigate" },
+        .{ .key = "g/G", .action = "Top/Bottom" },
+        .{ .key = "Enter", .action = "Select" },
+        .{ .key = "Esc", .action = "Quit" },
+    };
 }
 
 // -- Widget interface --

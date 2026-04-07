@@ -10,6 +10,7 @@ pub const Theme = @import("Theme.zig");
 pub const TextInput = @import("widgets/TextInput.zig");
 pub const ListView = @import("widgets/ListView.zig");
 pub const HelpLine = @import("widgets/HelpLine.zig");
+pub const WithHelpLine = @import("widgets/WithHelpLine.zig").WithHelpLine;
 
 test {
     _ = Terminal;
@@ -22,4 +23,6 @@ test {
     _ = TextInput;
     _ = ListView;
     _ = HelpLine;
+    _ = @import("widgets/WithHelpLine.zig");
+    _ = @import("cursor_tracker.zig");
 }
