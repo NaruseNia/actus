@@ -208,24 +208,18 @@ pub fn render(self: *ListView, writer: anytype) !void {
 
 /// Clear all rendered lines from the terminal. Call after the event loop
 /// ends to remove the list UI before printing results.
-pub fn cleanup(self: *ListView, writer: anytype) !void {
+/// `extra_lines`: number of extra lines the cursor moved down since
+/// the last render (e.g. 1 if App.run wrote a final "\r\n").
+pub fn cleanup(self: *ListView, writer: anytype, extra_lines: u16) !void {
     if (self.last_rendered_lines == 0) return;
-    // Move to top of block
-    if (self.cursor_line > 0) {
-        try Terminal.moveCursorUp(writer, @intCast(self.cursor_line));
+    // Move cursor to the top of the rendered block
+    const up = self.cursor_line + extra_lines;
+    if (up > 0) {
+        try Terminal.moveCursorUp(writer, @intCast(up));
     }
-    // Clear every line
-    for (0..self.last_rendered_lines) |i| {
-        try Terminal.clearLine(writer);
-        if (i < self.last_rendered_lines - 1) {
-            try writer.writeAll("\n");
-        }
-    }
-    // Move back to top
-    if (self.last_rendered_lines > 1) {
-        try Terminal.moveCursorUp(writer, @intCast(self.last_rendered_lines - 1));
-    }
+    // Clear current line and everything below it
     try Terminal.clearLine(writer);
+    try Terminal.clearFromCursor(writer);
     self.last_rendered_lines = 0;
     self.cursor_line = 0;
 }

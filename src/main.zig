@@ -31,10 +31,11 @@ pub fn main() !void {
 
     const stdout = std.fs.File.stdout();
 
-    // Clean up the list UI before printing results
+    // Clean up the list UI before printing results.
+    // extra_lines=1 accounts for the "\r\n" that App.run() writes on exit.
     var cleanup_buf: [4096]u8 = undefined;
     var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
-    try list_view.cleanup(cleanup_fbs.writer());
+    try list_view.cleanup(cleanup_fbs.writer(), 1);
     try stdout.writeAll(cleanup_fbs.getWritten());
     if (list_view.isCancelled()) {
         try stdout.writeAll("Cancelled.\n");
