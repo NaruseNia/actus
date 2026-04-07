@@ -7,6 +7,8 @@ pub const HandleResult = enum {
     consumed,
     /// Widget did not handle the event; pass to the next handler.
     ignored,
+    /// Widget is done; the event loop should exit.
+    done,
 };
 
 /// Comptime check: asserts that T has the required widget methods.

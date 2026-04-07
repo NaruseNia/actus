@@ -155,7 +155,7 @@ fn handleKey(self: *TextInput, key: Key) Widget.HandleResult {
         },
         .enter => {
             self.confirmed = true;
-            return .consumed;
+            return .done;
         },
         else => return .ignored,
     }
@@ -369,8 +369,9 @@ test "enter confirms" {
     defer ti.deinit();
 
     try std.testing.expect(!ti.isConfirmed());
-    _ = ti.handleEvent(.{ .key = .enter });
+    const result = ti.handleEvent(.{ .key = .enter });
     try std.testing.expect(ti.isConfirmed());
+    try std.testing.expectEqual(Widget.HandleResult.done, result);
 }
 
 test "render placeholder when empty" {

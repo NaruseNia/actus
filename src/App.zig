@@ -51,7 +51,11 @@ pub fn run(self: *App, widget: anytype) !void {
             },
         }
 
-        _ = widget.handleEvent(ev);
+        const result = widget.handleEvent(ev);
+        if (result == .done) {
+            self.running = false;
+            continue;
+        }
 
         if (widget.needsRender()) {
             try Terminal.hideCursor(&writer);
