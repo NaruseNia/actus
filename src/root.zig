@@ -11,6 +11,7 @@ pub const TextInput = @import("widgets/TextInput.zig");
 pub const ListView = @import("widgets/ListView.zig");
 pub const HelpLine = @import("widgets/HelpLine.zig");
 pub const WithHelpLine = @import("widgets/WithHelpLine.zig").WithHelpLine;
+pub const FilePicker = @import("widgets/FilePicker.zig");
 
 test {
     _ = Terminal;
@@ -25,4 +26,5 @@ test {
     _ = HelpLine;
     _ = @import("widgets/WithHelpLine.zig");
     _ = @import("cursor_tracker.zig");
+    _ = FilePicker;
 }
