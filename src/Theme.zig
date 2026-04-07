@@ -2,29 +2,14 @@ const Style = @import("Style.zig");
 
 const Theme = @This();
 
-/// Styles for `TextInput`.
-pub const TextInput = struct {
-    placeholder: Style = Style.fg(.bright_black),
-};
-
-/// Styles for `ListView`.
-pub const ListView = struct {
-    selected: Style = Style.fg(.cyan).setBold(),
-    normal: Style = .{},
-    count: Style = Style.fg(.bright_black),
-    filter_placeholder: Style = Style.fg(.bright_black),
-};
-
-/// Styles for `HelpLine`.
-pub const HelpLine = struct {
-    key: Style = Style.fg(.cyan),
-    action: Style = Style.fg(.bright_black),
-    separator: Style = Style.fg(.bright_black),
-};
-
-text_input: TextInput = .{},
-list_view: ListView = .{},
-help_line: HelpLine = .{},
+/// Main emphasis — selected items, active elements.
+primary: Style = Style.fg(.cyan).setBold(),
+/// Secondary emphasis — key labels, highlights.
+accent: Style = Style.fg(.cyan),
+/// Dim/supporting text — placeholders, counts, descriptions.
+muted: Style = Style.fg(.bright_black),
+/// Normal body text.
+text: Style = .{},
 
 /// Built-in default theme.
 pub const default: Theme = .{};
@@ -36,52 +21,50 @@ const std = @import("std");
 test "default theme has expected styles" {
     const t = Theme.default;
 
-    // TextInput: placeholder is bright_black
+    // primary: cyan + bold
+    try std.testing.expectEqual(
+        Style.ColorSpec{ .ansi = .cyan },
+        t.primary.fg_color.?,
+    );
+    try std.testing.expect(t.primary.font.bold);
+
+    // accent: cyan (no bold)
+    try std.testing.expectEqual(
+        Style.ColorSpec{ .ansi = .cyan },
+        t.accent.fg_color.?,
+    );
+    try std.testing.expect(!t.accent.font.bold);
+
+    // muted: bright_black
     try std.testing.expectEqual(
         Style.ColorSpec{ .ansi = .bright_black },
-        t.text_input.placeholder.fg_color.?,
+        t.muted.fg_color.?,
     );
 
-    // ListView: selected is cyan + bold
-    try std.testing.expectEqual(
-        Style.ColorSpec{ .ansi = .cyan },
-        t.list_view.selected.fg_color.?,
-    );
-    try std.testing.expect(t.list_view.selected.font.bold);
-
-    // ListView: normal has no color
-    try std.testing.expect(t.list_view.normal.fg_color == null);
-
-    // HelpLine: key is cyan
-    try std.testing.expectEqual(
-        Style.ColorSpec{ .ansi = .cyan },
-        t.help_line.key.fg_color.?,
-    );
+    // text: no color
+    try std.testing.expect(t.text.fg_color == null);
 }
 
 test "custom theme overrides" {
     const custom = Theme{
-        .text_input = .{
-            .placeholder = Style.fg(.red),
-        },
-        .list_view = .{
-            .selected = Style.fg(.green).setBold(),
-        },
-        .help_line = .{
-            .key = Style.fg(.yellow),
-        },
+        .primary = Style.fg(.green).setBold(),
+        .accent = Style.fg(.yellow),
+        .muted = Style.fg(.white).setDim(),
     };
 
     try std.testing.expectEqual(
-        Style.ColorSpec{ .ansi = .red },
-        custom.text_input.placeholder.fg_color.?,
-    );
-    try std.testing.expectEqual(
         Style.ColorSpec{ .ansi = .green },
-        custom.list_view.selected.fg_color.?,
+        custom.primary.fg_color.?,
     );
     try std.testing.expectEqual(
         Style.ColorSpec{ .ansi = .yellow },
-        custom.help_line.key.fg_color.?,
+        custom.accent.fg_color.?,
     );
+    try std.testing.expectEqual(
+        Style.ColorSpec{ .ansi = .white },
+        custom.muted.fg_color.?,
+    );
+    try std.testing.expect(custom.muted.font.dim);
+    // text unchanged (default)
+    try std.testing.expect(custom.text.fg_color == null);
 }
