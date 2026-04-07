@@ -24,6 +24,8 @@ pub const EntryKind = enum {
 pub const Entry = struct {
     name: []const u8,
     kind: EntryKind,
+    size: ?u64 = null,
+    mode: ?u32 = null,
 };
 
 // -- Configuration --
@@ -41,6 +43,12 @@ pub const Config = struct {
     cursor: []const u8 = "> ",
     /// Prefix shown before non-selected items (should match cursor width).
     indent: []const u8 = "  ",
+    /// Show file size next to entries.
+    show_size: bool = false,
+    /// Show POSIX permission bits next to entries.
+    show_permissions: bool = false,
+    /// Style for metadata (size, permissions). Overrides theme.muted when set.
+    meta_style: ?Style = null,
     /// Show item count at the bottom of the list.
     show_count: bool = false,
     /// Style for the count line. Overrides theme.muted when set.
@@ -180,6 +188,9 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
                 if (is_dir) try writer.writeAll("/");
                 try base_style.writeEnd(writer);
             }
+
+            // Metadata columns
+            try self.renderEntryMeta(writer, entry);
             total_lines += 1;
         }
     }
@@ -299,6 +310,8 @@ fn loadDirectory(self: *FilePicker) void {
     defer dir.close();
 
     var iter = dir.iterate();
+    const need_stat = self.config.show_size or self.config.show_permissions;
+
     while (iter.next() catch null) |fs_entry| {
         const kind: EntryKind = switch (fs_entry.kind) {
             .directory => .directory,
@@ -306,11 +319,19 @@ fn loadDirectory(self: *FilePicker) void {
             .file => .file,
             else => .unknown,
         };
-        const name = self.allocator.dupe(u8, fs_entry.name) catch continue;
-        self.entries.append(self.allocator, .{
-            .name = name,
+        var entry = Entry{
+            .name = undefined,
             .kind = kind,
-        }) catch {
+        };
+        if (need_stat) {
+            if (dir.statFile(fs_entry.name)) |stat| {
+                entry.size = stat.size;
+                entry.mode = @as(u32, @intCast(@as(u16, @bitCast(stat.mode))));
+            } else |_| {}
+        }
+        const name = self.allocator.dupe(u8, fs_entry.name) catch continue;
+        entry.name = name;
+        self.entries.append(self.allocator, entry) catch {
             self.allocator.free(name);
             continue;
         };
@@ -420,6 +441,80 @@ fn visibleCount(self: *const FilePicker) usize {
         return @min(max, self.entryCount());
     }
     return self.entryCount();
+}
+
+// -- Metadata rendering --
+
+fn renderEntryMeta(self: *const FilePicker, writer: anytype, entry: Entry) !void {
+    const has_meta = self.config.show_permissions or self.config.show_size;
+    if (!has_meta) return;
+
+    const m_style = self.config.meta_style orelse self.config.theme.muted;
+
+    if (self.config.show_permissions) {
+        try writer.writeAll("  ");
+        if (entry.mode) |mode| {
+            var perm_buf: [9]u8 = undefined;
+            const perm = formatPermissions(mode, &perm_buf);
+            try m_style.write(writer, perm);
+        } else {
+            try m_style.write(writer, "---------");
+        }
+    }
+
+    if (self.config.show_size) {
+        try writer.writeAll("  ");
+        if (entry.kind == .directory) {
+            try m_style.write(writer, "   -");
+        } else if (entry.size) |size| {
+            var size_buf: [8]u8 = undefined;
+            const size_str = formatSize(size, &size_buf);
+            // Right-align to 4 chars
+            const padding = if (size_str.len < 4) 4 - size_str.len else 0;
+            for (0..padding) |_| try writer.writeAll(" ");
+            try m_style.write(writer, size_str);
+        } else {
+            try m_style.write(writer, "   ?");
+        }
+    }
+}
+
+pub fn formatSize(size: u64, buf: *[8]u8) []const u8 {
+    if (size < 1024) {
+        return std.fmt.bufPrint(buf, "{d}B", .{size}) catch "?";
+    } else if (size < 1024 * 1024) {
+        const kb = @as(f64, @floatFromInt(size)) / 1024.0;
+        return formatFloat(buf, kb, "K");
+    } else if (size < 1024 * 1024 * 1024) {
+        const mb = @as(f64, @floatFromInt(size)) / (1024.0 * 1024.0);
+        return formatFloat(buf, mb, "M");
+    } else {
+        const gb = @as(f64, @floatFromInt(size)) / (1024.0 * 1024.0 * 1024.0);
+        return formatFloat(buf, gb, "G");
+    }
+}
+
+fn formatFloat(buf: *[8]u8, val: f64, suffix: []const u8) []const u8 {
+    if (val < 10.0) {
+        return std.fmt.bufPrint(buf, "{d:.1}{s}", .{ val, suffix }) catch "?";
+    } else {
+        const int_val: u64 = @intFromFloat(val);
+        return std.fmt.bufPrint(buf, "{d}{s}", .{ int_val, suffix }) catch "?";
+    }
+}
+
+pub fn formatPermissions(mode: u32, buf: *[9]u8) []const u8 {
+    const chars = "rwx";
+    inline for (0..3) |group| {
+        const shift: u5 = @intCast((2 - group) * 3);
+        const bits: u3 = @truncate(mode >> shift);
+        inline for (0..3) |bit| {
+            const idx = group * 3 + bit;
+            const flag: u3 = @as(u3, 1) << @intCast(2 - bit);
+            buf[idx] = if (bits & flag != 0) chars[bit] else '-';
+        }
+    }
+    return buf[0..9];
 }
 
 // -- Tests --
@@ -689,6 +784,94 @@ test "unhandled key returns ignored" {
 
     const result = fp.handleEvent(.{ .key = .tab });
     try std.testing.expectEqual(Widget.HandleResult.ignored, result);
+}
+
+test "formatSize bytes" {
+    var buf: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("0B", formatSize(0, &buf));
+    try std.testing.expectEqualStrings("512B", formatSize(512, &buf));
+    try std.testing.expectEqualStrings("1023B", formatSize(1023, &buf));
+}
+
+test "formatSize kilobytes" {
+    var buf: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("1.0K", formatSize(1024, &buf));
+    try std.testing.expectEqualStrings("1.5K", formatSize(1536, &buf));
+    try std.testing.expectEqualStrings("10K", formatSize(10240, &buf));
+}
+
+test "formatSize megabytes" {
+    var buf: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("1.0M", formatSize(1048576, &buf));
+    try std.testing.expectEqualStrings("5.5M", formatSize(5767168, &buf));
+}
+
+test "formatSize gigabytes" {
+    var buf: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("1.0G", formatSize(1073741824, &buf));
+}
+
+test "formatPermissions 0o755" {
+    var buf: [9]u8 = undefined;
+    try std.testing.expectEqualStrings("rwxr-xr-x", formatPermissions(0o755, &buf));
+}
+
+test "formatPermissions 0o644" {
+    var buf: [9]u8 = undefined;
+    try std.testing.expectEqualStrings("rw-r--r--", formatPermissions(0o644, &buf));
+}
+
+test "formatPermissions 0o000" {
+    var buf: [9]u8 = undefined;
+    try std.testing.expectEqualStrings("---------", formatPermissions(0o000, &buf));
+}
+
+test "formatPermissions 0o777" {
+    var buf: [9]u8 = undefined;
+    try std.testing.expectEqualStrings("rwxrwxrwx", formatPermissions(0o777, &buf));
+}
+
+test "render with show_size" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .show_size = true });
+    defer fp.deinit();
+    if (fp.entryCount() == 0) return;
+
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try fp.render(fbs.writer());
+
+    // Should render without errors (basic smoke test)
+    try std.testing.expect(fbs.getWritten().len > 0);
+}
+
+test "render with show_permissions" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .show_permissions = true });
+    defer fp.deinit();
+    if (fp.entryCount() == 0) return;
+
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try fp.render(fbs.writer());
+
+    const output = fbs.getWritten();
+    // Should contain permission-like patterns (r/w/x or -)
+    try std.testing.expect(std.mem.indexOf(u8, output, "rw") != null or
+        std.mem.indexOf(u8, output, "---") != null);
+}
+
+test "render with show_size and show_permissions" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .show_size = true, .show_permissions = true });
+    defer fp.deinit();
+    if (fp.entryCount() == 0) return;
+
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try fp.render(fbs.writer());
+
+    try std.testing.expect(fbs.getWritten().len > 0);
 }
 
 test "directories shown with trailing slash in render" {
