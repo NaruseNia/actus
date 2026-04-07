@@ -22,6 +22,7 @@ Build interactive CLI applications with composable, reusable widgets. Supports m
 | **HelpLine** | Read-only key-binding display (typically used via `WithHelpLine`) |
 | **WithHelpLine** | Generic wrapper that adds a help line below any widget |
 | **WithTitle** | Generic wrapper that adds a styled title line above any widget |
+| **Decorated** | Convenience wrapper combining title + help line in one type |
 
 ## Requirements
 
@@ -61,20 +62,22 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var text_input = actus.TextInput.init(allocator, .{
-        .placeholder = "Type your name...",
-        .max_length = 50,
+    const items = [_][]const u8{ "Apple", "Banana", "Cherry" };
+    var lv = actus.ListView.init(allocator, &items, .{ .filterable = true });
+    defer lv.deinit();
+
+    // Decorated adds a title above and a help line below in one wrapper
+    var d = actus.Decorated(actus.ListView).init(&lv, .{
+        .title = "Pick a fruit:",
     });
-    defer text_input.deinit();
 
     var app = try actus.App.init();
     defer app.deinit();
-    try app.run(&text_input);
+    try app.run(&d);
 
     const stdout = std.fs.File.stdout();
-    if (text_input.isConfirmed()) {
-        try stdout.writeAll("You entered: ");
-        try stdout.writeAll(text_input.value());
+    if (lv.selectedItem()) |item| {
+        try stdout.writeAll(item);
         try stdout.writeAll("\n");
     }
 }
@@ -112,6 +115,7 @@ src/
     HelpLine.zig        -- Key-binding display
     WithHelpLine.zig    -- Generic wrapper: help line below widget
     WithTitle.zig       -- Generic wrapper: title above widget
+    Decorated.zig       -- Convenience wrapper: title + help line combined
   main.zig              -- Interactive demo app
 ```
 

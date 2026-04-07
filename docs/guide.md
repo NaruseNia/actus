@@ -11,6 +11,7 @@
   - [HelpLine](#helpline)
   - [WithHelpLine](#withhelpline)
   - [WithTitle](#withtitle)
+  - [Decorated](#decorated)
 - [Composing Widgets](#composing-widgets)
 - [Styling and Themes](#styling-and-themes)
 - [Creating Custom Widgets](#creating-custom-widgets)
@@ -339,37 +340,62 @@ The title is rendered once and stays fixed. Child widget output is forwarded via
 
 ---
 
-## Composing Widgets
+### Decorated
 
-Wrappers are composable. You can stack `WithTitle` and `WithHelpLine` around any widget:
+Convenience wrapper that combines a title above and a help line below in a single type. This is the recommended way to add title and help line to a widget.
 
 ```zig
-const actus = @import("actus");
+var lv = actus.ListView.init(allocator, &items, .{});
+defer lv.deinit();
 
+var d = actus.Decorated(actus.ListView).init(&lv, .{
+    .title = "Pick one fruit:",
+});
+```
+
+This is equivalent to manually chaining `WithHelpLine` and `WithTitle`, but without intermediate variables.
+
+**Config options:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `title` | `?[]const u8` | `null` | Title text (`null` = no title) |
+| `title_style` | `?Style` | `null` | Style for title (defaults to `theme.primary`) |
+| `show_help` | `bool` | `true` | Show/hide the help line |
+| `help_bindings` | `?[]const Binding` | `null` | Explicit bindings (overrides child's) |
+| `help_separator` | `[]const u8` | `"   "` | Separator between bindings |
+| `help_key_style` | `?Style` | `null` | Style for key labels |
+| `help_action_style` | `?Style` | `null` | Style for action labels |
+| `help_separator_style` | `?Style` | `null` | Style for separators |
+| `theme` | `Theme` | `Theme.default` | Fallback theme |
+
+---
+
+## Composing Widgets
+
+### Using Decorated (recommended)
+
+`Decorated` is the simplest way to add a title and help line:
+
+```zig
 var lv = actus.ListView.init(allocator, &items, .{ .filterable = true });
 defer lv.deinit();
 
-// Step 1: Wrap with help line (auto-populated from ListView.helpBindings)
-const WithHL = actus.WithHelpLine(actus.ListView);
-var with_help = WithHL.init(&lv, .{});
-
-// Step 2: Wrap with title
-var titled = actus.WithTitle(WithHL).init(&with_help, .{
+var d = actus.Decorated(actus.ListView).init(&lv, .{
     .title = "Pick one fruit:",
 });
 
-// Step 3: Run
 var app = try actus.App.init();
 defer app.deinit();
-try app.run(&titled);
+try app.run(&d);
 
-// Step 4: Cleanup (removes all rendered lines)
+// Cleanup
 var buf: [actus.Terminal.render_buf_size]u8 = undefined;
 var fbs = std.io.fixedBufferStream(&buf);
-try titled.cleanup(fbs.writer(), 1);
+try d.cleanup(fbs.writer(), 1);
 try stdout.writeAll(fbs.getWritten());
 
-// Step 5: Read result
+// Read result
 if (lv.selectedItem()) |item| {
     // ...
 }
@@ -385,6 +411,19 @@ Pick one fruit:
   Cherry
   1/3
 ↑↓ Navigate   Esc Clear   Enter Select
+```
+
+### Using WithTitle + WithHelpLine separately
+
+For more control, you can chain `WithHelpLine` and `WithTitle` individually:
+
+```zig
+const WithHL = actus.WithHelpLine(actus.ListView);
+var with_help = WithHL.init(&lv, .{});
+var titled = actus.WithTitle(WithHL).init(&with_help, .{
+    .title = "Pick one fruit:",
+});
+try app.run(&titled);
 ```
 
 ---
