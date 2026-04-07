@@ -30,16 +30,13 @@ Build interactive CLI applications with composable, reusable widgets. Supports m
 
 ## Installation
 
-Add `actus` as a dependency in your `build.zig.zon`:
+Fetch the package using `zig fetch`:
 
-```zig
-.dependencies = .{
-    .actus = .{
-        .url = "https://github.com/NaruseNia/actus/archive/<commit-hash>.tar.gz",
-        .hash = "...",
-    },
-},
+```sh
+zig fetch --save git+https://github.com/NaruseNia/actus.git#refs/tags/v0.1.0
 ```
+
+This adds `actus` to your `build.zig.zon` automatically.
 
 Then in your `build.zig`:
 
