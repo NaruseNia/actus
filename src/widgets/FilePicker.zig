@@ -85,6 +85,7 @@ last_rendered_lines: usize = 0,
 cursor_line: usize = 0,
 
 current_path: std.ArrayListUnmanaged(u8) = .empty,
+initial_path: std.ArrayListUnmanaged(u8) = .empty,
 
 /// Filter input buffer (used when filterable is true).
 filter_buffer: std.ArrayListUnmanaged(u8) = .empty,
@@ -114,6 +115,8 @@ pub fn init(allocator: std.mem.Allocator, initial_path: []const u8, config: Conf
     if (fp.current_path.items.len > 1 and fp.current_path.items[fp.current_path.items.len - 1] == std.fs.path.sep) {
         fp.current_path.shrinkRetainingCapacity(fp.current_path.items.len - 1);
     }
+    // Remember initial path to control ".." visibility
+    fp.initial_path.appendSlice(allocator, fp.current_path.items) catch {};
     fp.loadDirectory();
     return fp;
 }
@@ -122,6 +125,7 @@ pub fn deinit(self: *FilePicker) void {
     self.freeEntries();
     self.entries.deinit(self.allocator);
     self.current_path.deinit(self.allocator);
+    self.initial_path.deinit(self.allocator);
     self.filter_buffer.deinit(self.allocator);
     self.filtered_indices.deinit(self.allocator);
 }
@@ -460,6 +464,20 @@ fn loadDirectory(self: *FilePicker) void {
     }
 
     self.sortEntries();
+
+    // Insert ".." at the top when not at the initial directory
+    if (!std.mem.eql(u8, self.current_path.items, self.initial_path.items)) {
+        const dotdot = self.allocator.dupe(u8, "..") catch ".."[0..0];
+        if (dotdot.len > 0) {
+            self.entries.insert(self.allocator, 0, .{
+                .name = dotdot,
+                .kind = .directory,
+            }) catch {
+                self.allocator.free(dotdot);
+            };
+        }
+    }
+
     // Reset filter on directory change
     self.filter_buffer.clearRetainingCapacity();
     self.rebuildFilter();
@@ -469,6 +487,10 @@ fn loadDirectory(self: *FilePicker) void {
 }
 
 fn enterDirectory(self: *FilePicker, name: []const u8) void {
+    if (std.mem.eql(u8, name, "..")) {
+        self.goToParent();
+        return;
+    }
     self.current_path.append(self.allocator, std.fs.path.sep) catch return;
     self.current_path.appendSlice(self.allocator, name) catch return;
     self.loadDirectory();
