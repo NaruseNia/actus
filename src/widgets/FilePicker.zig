@@ -66,6 +66,9 @@ pub const Config = struct {
     filter_placeholder: []const u8 = "",
     /// Style for the filter placeholder. Overrides theme.muted when set.
     filter_placeholder_style: ?Style = null,
+    /// When true, current_path and selectedPath return absolute paths.
+    /// When false (default), paths stay relative as given to init.
+    absolute_path: bool = false,
     /// Theme providing default styles.
     theme: Theme = Theme.default,
 };
@@ -96,7 +99,17 @@ pub fn init(allocator: std.mem.Allocator, initial_path: []const u8, config: Conf
         .config = config,
         .allocator = allocator,
     };
-    fp.current_path.appendSlice(allocator, initial_path) catch {};
+    if (config.absolute_path) {
+        // Resolve to absolute path
+        if (std.fs.cwd().realpathAlloc(allocator, initial_path)) |abs| {
+            fp.current_path.appendSlice(allocator, abs) catch {};
+            allocator.free(abs);
+        } else |_| {
+            fp.current_path.appendSlice(allocator, initial_path) catch {};
+        }
+    } else {
+        fp.current_path.appendSlice(allocator, initial_path) catch {};
+    }
     // Remove trailing separator if present (unless root "/")
     if (fp.current_path.items.len > 1 and fp.current_path.items[fp.current_path.items.len - 1] == std.fs.path.sep) {
         fp.current_path.shrinkRetainingCapacity(fp.current_path.items.len - 1);
@@ -1218,6 +1231,35 @@ test "helpBindings after filter cleared shows Cancel" {
     _ = fp.handleEvent(.{ .key = .escape }); // Clear filter
     const bindings = fp.helpBindings();
     try std.testing.expectEqualStrings("Cancel", bindings[2].action);
+}
+
+test "absolute_path resolves to absolute" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .absolute_path = true });
+    defer fp.deinit();
+
+    // Should start with "/" on POSIX
+    try std.testing.expect(fp.currentPath().len > 1);
+    try std.testing.expect(fp.currentPath()[0] == '/');
+}
+
+test "relative path stays relative" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, "src", .{ .absolute_path = false });
+    defer fp.deinit();
+
+    try std.testing.expectEqualStrings("src", fp.currentPath());
+}
+
+test "absolute_path selectedPath returns absolute" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .absolute_path = true });
+    defer fp.deinit();
+    if (fp.filteredCount() == 0) return;
+
+    const path = fp.selectedPath().?;
+    defer allocator.free(path);
+    try std.testing.expect(path[0] == '/');
 }
 
 test "WithHelpLine(FilePicker) satisfies Widget interface" {
