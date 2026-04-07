@@ -46,8 +46,10 @@ scroll_offset: usize = 0,
 dirty: bool = true,
 confirmed: bool = false,
 cancelled: bool = false,
-/// Number of lines rendered in the last render call (for cursor repositioning).
+/// Number of lines rendered in the last render call.
 last_rendered_lines: usize = 0,
+/// Cursor line position after last render (0-indexed from top of block).
+cursor_line: usize = 0,
 
 /// Filter input buffer (used when filterable is true).
 filter_buffer: std.ArrayListUnmanaged(u8) = .empty,
@@ -109,9 +111,9 @@ pub fn handleEvent(self: *ListView, ev: Event) Widget.HandleResult {
 }
 
 pub fn render(self: *ListView, writer: anytype) !void {
-    // Move cursor back to the start of the previously rendered block
-    if (self.last_rendered_lines > 1) {
-        try Terminal.moveCursorUp(writer, @intCast(self.last_rendered_lines - 1));
+    // Move cursor back to the top of the previously rendered block
+    if (self.cursor_line > 0) {
+        try Terminal.moveCursorUp(writer, @intCast(self.cursor_line));
     }
 
     // Convention: \n is written BEFORE each new line (except the first).
@@ -190,14 +192,17 @@ pub fn render(self: *ListView, writer: anytype) !void {
         try Terminal.moveCursorUp(writer, @intCast(extra));
     }
 
+    self.last_rendered_lines = total_lines;
+    self.cursor_line = if (total_lines > 0) total_lines - 1 else 0;
+
     // Position cursor on the filter input line for text entry
     if (self.config.filterable and total_lines > 1) {
         try Terminal.moveCursorUp(writer, @intCast(total_lines - 1));
         const col = self.config.filter_prefix.len + self.filter_buffer.items.len;
         try Terminal.moveCursorTo(writer, @intCast(col));
+        self.cursor_line = 0;
     }
 
-    self.last_rendered_lines = total_lines;
     self.dirty = false;
 }
 
