@@ -59,26 +59,20 @@ pub fn WithTitle(comptime ChildWidget: type) type {
 
         pub fn render(self: *Self, writer: anytype) !void {
             if (self.first_render) {
-                // Title line + newline to push child below
+                // Title line + newline to push child below on first render only.
+                // The title is static, so we never re-render it.
                 try self.renderTitle(writer);
                 try writer.writeAll("\n");
-                try self.child.render(writer);
                 self.first_render = false;
-            } else {
-                // Move up to the title line, re-render everything
-                if (self.cursor_line > 0) {
-                    try Terminal.moveCursorUp(writer, @intCast(self.cursor_line));
-                }
-                try self.renderTitle(writer);
-                try writer.writeAll("\n");
-                try self.child.render(writer);
             }
 
-            // Compute layout: title adds 1 line above the child
+            // Render child to buffer to analyze layout, then forward output.
             var child_buf: [Terminal.render_buf_size]u8 = undefined;
             var child_fbs = std.io.fixedBufferStream(&child_buf);
             try self.child.render(&child_fbs.writer());
+
             const wl = widget_layout.getWidgetLayout(self.child, child_fbs.getWritten());
+            try writer.writeAll(child_fbs.getWritten());
 
             self.last_rendered_lines = wl.total_lines + 1; // +1 for title
             self.cursor_line = wl.cursor_row + 1; // +1 for title
@@ -273,7 +267,7 @@ test "helpBindings returns empty for widget without them" {
     try testing.expectEqual(@as(usize, 0), bindings.len);
 }
 
-test "second render re-renders from title position" {
+test "second render does not re-render title" {
     var mock = MockWidget{};
     var w = WithTitle(MockWidget).init(&mock, .{ .title = "Title" });
 
@@ -281,14 +275,16 @@ test "second render re-renders from title position" {
     var buf1: [4096]u8 = undefined;
     var fbs1 = std.io.fixedBufferStream(&buf1);
     try w.render(fbs1.writer());
+    const out1 = fbs1.getWritten();
+    try testing.expect(std.mem.indexOf(u8, out1, "Title") != null);
 
-    // Second render should include cursor up escape
+    // Second render should NOT contain title (it's static)
     var buf2: [4096]u8 = undefined;
     var fbs2 = std.io.fixedBufferStream(&buf2);
     try w.render(fbs2.writer());
 
-    const output = fbs2.getWritten();
-    // Should start with cursor up to get back to title
-    try testing.expect(std.mem.indexOf(u8, output, "\x1b[") != null);
-    try testing.expect(std.mem.indexOf(u8, output, "Title") != null);
+    const out2 = fbs2.getWritten();
+    try testing.expect(std.mem.indexOf(u8, out2, "Title") == null);
+    // But should still contain child content
+    try testing.expect(std.mem.indexOf(u8, out2, "mock content") != null);
 }
