@@ -57,6 +57,14 @@ pub const Config = struct {
     show_path: bool = true,
     /// Style for the path line. Overrides theme.muted when set.
     path_style: ?Style = null,
+    /// Enable incremental filter/search mode.
+    filterable: bool = false,
+    /// Prefix shown before the filter input line.
+    filter_prefix: []const u8 = "/ ",
+    /// Placeholder shown when the filter is empty.
+    filter_placeholder: []const u8 = "",
+    /// Style for the filter placeholder. Overrides theme.muted when set.
+    filter_placeholder_style: ?Style = null,
     /// Theme providing default styles.
     theme: Theme = Theme.default,
 };
@@ -73,6 +81,11 @@ last_rendered_lines: usize = 0,
 cursor_line: usize = 0,
 
 current_path: std.ArrayListUnmanaged(u8) = .empty,
+
+/// Filter input buffer (used when filterable is true).
+filter_buffer: std.ArrayListUnmanaged(u8) = .empty,
+/// Indices into `entries` that match the current filter.
+filtered_indices: std.ArrayListUnmanaged(usize) = .empty,
 
 config: Config,
 allocator: std.mem.Allocator,
@@ -95,12 +108,19 @@ pub fn deinit(self: *FilePicker) void {
     self.freeEntries();
     self.entries.deinit(self.allocator);
     self.current_path.deinit(self.allocator);
+    self.filter_buffer.deinit(self.allocator);
+    self.filtered_indices.deinit(self.allocator);
+}
+
+/// Returns the current filter text.
+pub fn filterValue(self: *const FilePicker) []const u8 {
+    return self.filter_buffer.items;
 }
 
 /// Returns the currently selected entry.
 pub fn selectedEntry(self: *const FilePicker) ?Entry {
-    if (self.entryCount() == 0) return null;
-    return self.entries.items[self.selected];
+    if (self.filteredCount() == 0) return null;
+    return self.entries.items[self.filtered_indices.items[self.selected]];
 }
 
 /// Returns the full path of the selected entry.
@@ -150,7 +170,21 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
         total_lines += 1;
     }
 
-    const count = self.entryCount();
+    // Filter input line
+    if (self.config.filterable) {
+        if (total_lines > 0) try writer.writeAll("\n");
+        try Terminal.clearLine(writer);
+        try writer.writeAll(self.config.filter_prefix);
+        if (self.filter_buffer.items.len == 0 and self.config.filter_placeholder.len > 0) {
+            const fp_style = self.config.filter_placeholder_style orelse self.config.theme.muted;
+            try fp_style.write(writer, self.config.filter_placeholder);
+        } else {
+            try writer.writeAll(self.filter_buffer.items);
+        }
+        total_lines += 1;
+    }
+
+    const count = self.filteredCount();
 
     if (count == 0) {
         if (total_lines > 0) try writer.writeAll("\n");
@@ -163,14 +197,15 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
         const start = self.scroll_offset;
         const end = start + visible;
 
-        for (start..end) |i| {
-            const entry = self.entries.items[i];
+        for (start..end) |fi| {
+            const entry_idx = self.filtered_indices.items[fi];
+            const entry = self.entries.items[entry_idx];
             if (total_lines > 0) try writer.writeAll("\n");
             try Terminal.clearLine(writer);
 
             const is_dir = entry.kind == .directory;
 
-            if (i == self.selected) {
+            if (fi == self.selected) {
                 const sel_style = self.config.selected_style orelse self.config.theme.primary;
                 try sel_style.writeStart(writer);
                 try writer.writeAll(self.config.cursor);
@@ -200,10 +235,18 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
         if (total_lines > 0) try writer.writeAll("\n");
         try Terminal.clearLine(writer);
         const cnt_style = self.config.count_style orelse self.config.theme.muted;
-        try cnt_style.print(writer, "{d}/{d}", .{
-            if (count > 0) self.selected + 1 else @as(usize, 0),
-            count,
-        });
+        if (self.filter_buffer.items.len > 0) {
+            try cnt_style.print(writer, "{d}/{d} ({d} total)", .{
+                if (count > 0) self.selected + 1 else @as(usize, 0),
+                count,
+                self.entries.items.len,
+            });
+        } else {
+            try cnt_style.print(writer, "{d}/{d}", .{
+                if (count > 0) self.selected + 1 else @as(usize, 0),
+                count,
+            });
+        }
         total_lines += 1;
     }
 
@@ -219,6 +262,18 @@ pub fn render(self: *FilePicker, writer: anytype) !void {
 
     self.last_rendered_lines = total_lines;
     self.cursor_line = if (total_lines > 0) total_lines - 1 else 0;
+
+    // Position cursor on the filter input line for text entry
+    if (self.config.filterable and total_lines > 1) {
+        const filter_line: usize = if (self.config.show_path) 1 else 0;
+        const lines_to_go_up = self.cursor_line -| filter_line;
+        if (lines_to_go_up > 0) {
+            try Terminal.moveCursorUp(writer, @intCast(lines_to_go_up));
+        }
+        const col = self.config.filter_prefix.len + self.filter_buffer.items.len;
+        try Terminal.moveCursorTo(writer, @intCast(col));
+        self.cursor_line = filter_line;
+    }
 
     self.dirty = false;
 }
@@ -251,28 +306,43 @@ fn handleKey(self: *FilePicker, key: Key) Widget.HandleResult {
             self.moveDown();
             return .consumed;
         },
-        .left, .backspace => {
+        .left => {
             self.goToParent();
             return .consumed;
         },
-        .char => |cp| switch (cp) {
-            'k' => {
-                self.moveUp();
+        .backspace => {
+            if (self.config.filterable) {
+                self.deleteFilterChar();
                 return .consumed;
-            },
-            'j' => {
-                self.moveDown();
+            }
+            self.goToParent();
+            return .consumed;
+        },
+        .char => |cp| {
+            if (self.config.filterable) {
+                self.insertFilterChar(cp);
                 return .consumed;
-            },
-            'g' => {
-                self.moveToTop();
-                return .consumed;
-            },
-            'G' => {
-                self.moveToBottom();
-                return .consumed;
-            },
-            else => return .ignored,
+            }
+            // Vim keys only when not filterable
+            switch (cp) {
+                'k' => {
+                    self.moveUp();
+                    return .consumed;
+                },
+                'j' => {
+                    self.moveDown();
+                    return .consumed;
+                },
+                'g' => {
+                    self.moveToTop();
+                    return .consumed;
+                },
+                'G' => {
+                    self.moveToBottom();
+                    return .consumed;
+                },
+                else => return .ignored,
+            }
         },
         .home => {
             self.moveToTop();
@@ -283,8 +353,9 @@ fn handleKey(self: *FilePicker, key: Key) Widget.HandleResult {
             return .consumed;
         },
         .enter => {
-            if (self.entryCount() == 0) return .done;
-            const entry = self.entries.items[self.selected];
+            if (self.filteredCount() == 0) return .done;
+            const entry_idx = self.filtered_indices.items[self.selected];
+            const entry = self.entries.items[entry_idx];
             if (entry.kind == .directory) {
                 self.enterDirectory(entry.name);
                 return .consumed;
@@ -293,6 +364,15 @@ fn handleKey(self: *FilePicker, key: Key) Widget.HandleResult {
             return .done;
         },
         .escape => {
+            if (self.config.filterable and self.filter_buffer.items.len > 0) {
+                // Clear filter first
+                self.filter_buffer.clearRetainingCapacity();
+                self.rebuildFilter();
+                self.selected = 0;
+                self.scroll_offset = 0;
+                self.dirty = true;
+                return .consumed;
+            }
             self.cancelled = true;
             return .done;
         },
@@ -338,6 +418,9 @@ fn loadDirectory(self: *FilePicker) void {
     }
 
     self.sortEntries();
+    // Reset filter on directory change
+    self.filter_buffer.clearRetainingCapacity();
+    self.rebuildFilter();
     self.selected = 0;
     self.scroll_offset = 0;
     self.dirty = true;
@@ -390,12 +473,12 @@ fn sortEntries(self: *FilePicker) void {
 
 // -- Navigation --
 
-fn entryCount(self: *const FilePicker) usize {
-    return self.entries.items.len;
+fn filteredCount(self: *const FilePicker) usize {
+    return self.filtered_indices.items.len;
 }
 
 fn moveUp(self: *FilePicker) void {
-    if (self.entryCount() == 0) return;
+    if (self.filteredCount() == 0) return;
     if (self.selected > 0) {
         self.selected -= 1;
         self.adjustScroll();
@@ -404,8 +487,8 @@ fn moveUp(self: *FilePicker) void {
 }
 
 fn moveDown(self: *FilePicker) void {
-    if (self.entryCount() == 0) return;
-    if (self.selected < self.entryCount() - 1) {
+    if (self.filteredCount() == 0) return;
+    if (self.selected < self.filteredCount() - 1) {
         self.selected += 1;
         self.adjustScroll();
         self.dirty = true;
@@ -413,15 +496,15 @@ fn moveDown(self: *FilePicker) void {
 }
 
 fn moveToTop(self: *FilePicker) void {
-    if (self.entryCount() == 0) return;
+    if (self.filteredCount() == 0) return;
     self.selected = 0;
     self.scroll_offset = 0;
     self.dirty = true;
 }
 
 fn moveToBottom(self: *FilePicker) void {
-    if (self.entryCount() == 0) return;
-    self.selected = self.entryCount() - 1;
+    if (self.filteredCount() == 0) return;
+    self.selected = self.filteredCount() - 1;
     self.adjustScroll();
     self.dirty = true;
 }
@@ -438,9 +521,72 @@ fn adjustScroll(self: *FilePicker) void {
 
 fn visibleCount(self: *const FilePicker) usize {
     if (self.config.max_visible) |max| {
-        return @min(max, self.entryCount());
+        return @min(max, self.filteredCount());
     }
-    return self.entryCount();
+    return self.filteredCount();
+}
+
+// -- Filter --
+
+fn insertFilterChar(self: *FilePicker, cp: u21) void {
+    var encoded: [4]u8 = undefined;
+    const len = std.unicode.utf8Encode(cp, &encoded) catch return;
+    self.filter_buffer.insertSlice(self.allocator, self.filter_buffer.items.len, encoded[0..len]) catch return;
+    self.rebuildFilter();
+    self.selected = 0;
+    self.scroll_offset = 0;
+    self.dirty = true;
+}
+
+fn deleteFilterChar(self: *FilePicker) void {
+    if (self.filter_buffer.items.len == 0) return;
+    const prev_len = prevCodepointLen(self.filter_buffer.items, self.filter_buffer.items.len);
+    self.filter_buffer.shrinkRetainingCapacity(self.filter_buffer.items.len - prev_len);
+    self.rebuildFilter();
+    if (self.filteredCount() > 0 and self.selected >= self.filteredCount()) {
+        self.selected = self.filteredCount() - 1;
+    }
+    self.adjustScroll();
+    self.dirty = true;
+}
+
+fn rebuildFilter(self: *FilePicker) void {
+    self.filtered_indices.clearRetainingCapacity();
+    const filter = self.filter_buffer.items;
+    for (self.entries.items, 0..) |entry, i| {
+        if (filter.len == 0 or containsCaseInsensitive(entry.name, filter)) {
+            self.filtered_indices.append(self.allocator, i) catch return;
+        }
+    }
+}
+
+fn containsCaseInsensitive(haystack: []const u8, needle: []const u8) bool {
+    if (needle.len > haystack.len) return false;
+    const end = haystack.len - needle.len + 1;
+    for (0..end) |i| {
+        var match = true;
+        for (0..needle.len) |j| {
+            if (toLowerAscii(haystack[i + j]) != toLowerAscii(needle[j])) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return true;
+    }
+    return false;
+}
+
+fn toLowerAscii(c: u8) u8 {
+    return if (c >= 'A' and c <= 'Z') c + 32 else c;
+}
+
+fn prevCodepointLen(bytes: []const u8, pos: usize) usize {
+    if (pos == 0) return 0;
+    var i = pos - 1;
+    while (i > 0 and (bytes[i] & 0xC0) == 0x80) {
+        i -= 1;
+    }
+    return pos - i;
 }
 
 // -- Metadata rendering --
@@ -524,7 +670,7 @@ test "init loads directory entries" {
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
     // Current directory should have at least some entries (src, build.zig, etc.)
-    try std.testing.expect(fp.entryCount() > 0);
+    try std.testing.expect(fp.filteredCount() > 0);
 }
 
 test "entries sorted: directories first, then alphabetical" {
@@ -548,7 +694,7 @@ test "move down and up" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
-    if (fp.entryCount() < 2) return;
+    if (fp.filteredCount() < 2) return;
 
     _ = fp.handleEvent(.{ .key = .down });
     try std.testing.expectEqual(@as(usize, 1), fp.selected);
@@ -561,10 +707,10 @@ test "move down at bottom stays" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     // Move to bottom
-    for (0..fp.entryCount()) |_| {
+    for (0..fp.filteredCount()) |_| {
         _ = fp.handleEvent(.{ .key = .down });
     }
     const at_bottom = fp.selected;
@@ -585,7 +731,7 @@ test "vim keys j/k" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
-    if (fp.entryCount() < 2) return;
+    if (fp.filteredCount() < 2) return;
 
     _ = fp.handleEvent(.{ .key = .{ .char = 'j' } });
     try std.testing.expectEqual(@as(usize, 1), fp.selected);
@@ -598,10 +744,10 @@ test "g and G jump to top/bottom" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
-    if (fp.entryCount() < 2) return;
+    if (fp.filteredCount() < 2) return;
 
     _ = fp.handleEvent(.{ .key = .{ .char = 'G' } });
-    try std.testing.expectEqual(fp.entryCount() - 1, fp.selected);
+    try std.testing.expectEqual(fp.filteredCount() - 1, fp.selected);
 
     _ = fp.handleEvent(.{ .key = .{ .char = 'g' } });
     try std.testing.expectEqual(@as(usize, 0), fp.selected);
@@ -611,10 +757,10 @@ test "home and end keys" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
-    if (fp.entryCount() < 2) return;
+    if (fp.filteredCount() < 2) return;
 
     _ = fp.handleEvent(.{ .key = .end });
-    try std.testing.expectEqual(fp.entryCount() - 1, fp.selected);
+    try std.testing.expectEqual(fp.filteredCount() - 1, fp.selected);
 
     _ = fp.handleEvent(.{ .key = .home });
     try std.testing.expectEqual(@as(usize, 0), fp.selected);
@@ -704,7 +850,7 @@ test "scroll offset with max_visible" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{ .max_visible = 3 });
     defer fp.deinit();
-    if (fp.entryCount() < 5) return;
+    if (fp.filteredCount() < 5) return;
 
     try std.testing.expectEqual(@as(usize, 0), fp.scroll_offset);
 
@@ -719,7 +865,7 @@ test "render contains cursor and entry names" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{ .cursor = "> ", .indent = "  " });
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     var buf: [4096]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
@@ -746,7 +892,7 @@ test "render with show_count" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{ .show_count = true });
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     var buf: [4096]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
@@ -760,7 +906,7 @@ test "selectedEntry returns current entry" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{});
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     const entry = fp.selectedEntry().?;
     try std.testing.expect(entry.name.len > 0);
@@ -770,7 +916,7 @@ test "selectedPath returns full path" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, "src", .{});
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     const path = fp.selectedPath().?;
     defer allocator.free(path);
@@ -835,7 +981,7 @@ test "render with show_size" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{ .show_size = true });
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     var buf: [8192]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
@@ -849,7 +995,7 @@ test "render with show_permissions" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{ .show_permissions = true });
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     var buf: [8192]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
@@ -865,7 +1011,7 @@ test "render with show_size and show_permissions" {
     const allocator = std.testing.allocator;
     var fp = FilePicker.init(allocator, ".", .{ .show_size = true, .show_permissions = true });
     defer fp.deinit();
-    if (fp.entryCount() == 0) return;
+    if (fp.filteredCount() == 0) return;
 
     var buf: [8192]u8 = undefined;
     var fbs = std.io.fixedBufferStream(&buf);
@@ -896,4 +1042,129 @@ test "directories shown with trailing slash in render" {
     const output = fbs.getWritten();
     // At least one entry should end with "/"
     try std.testing.expect(std.mem.indexOf(u8, output, "/") != null);
+}
+
+test "filter narrows results" {
+    const allocator = std.testing.allocator;
+    // src/ directory should have .zig files
+    var fp = FilePicker.init(allocator, "src", .{ .filterable = true });
+    defer fp.deinit();
+
+    const total_before = fp.filteredCount();
+    if (total_before < 2) return;
+
+    // Type a filter that should narrow results
+    _ = fp.handleEvent(.{ .key = .{ .char = 'r' } });
+    _ = fp.handleEvent(.{ .key = .{ .char = 'o' } });
+    _ = fp.handleEvent(.{ .key = .{ .char = 'o' } });
+    _ = fp.handleEvent(.{ .key = .{ .char = 't' } });
+
+    try std.testing.expectEqualStrings("root", fp.filterValue());
+    try std.testing.expect(fp.filteredCount() <= total_before);
+}
+
+test "filter backspace widens results" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, "src", .{ .filterable = true });
+    defer fp.deinit();
+
+    _ = fp.handleEvent(.{ .key = .{ .char = 'r' } });
+    _ = fp.handleEvent(.{ .key = .{ .char = 'o' } });
+    _ = fp.handleEvent(.{ .key = .{ .char = 'o' } });
+    const count_after_roo = fp.filteredCount();
+
+    _ = fp.handleEvent(.{ .key = .backspace });
+    try std.testing.expect(fp.filteredCount() >= count_after_roo);
+    try std.testing.expectEqualStrings("ro", fp.filterValue());
+}
+
+test "escape clears filter before cancelling" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, "src", .{ .filterable = true });
+    defer fp.deinit();
+
+    _ = fp.handleEvent(.{ .key = .{ .char = 'a' } });
+    try std.testing.expectEqualStrings("a", fp.filterValue());
+
+    // First escape clears filter
+    const result1 = fp.handleEvent(.{ .key = .escape });
+    try std.testing.expectEqual(Widget.HandleResult.consumed, result1);
+    try std.testing.expectEqualStrings("", fp.filterValue());
+    try std.testing.expect(!fp.isCancelled());
+
+    // Second escape cancels
+    const result2 = fp.handleEvent(.{ .key = .escape });
+    try std.testing.expectEqual(Widget.HandleResult.done, result2);
+    try std.testing.expect(fp.isCancelled());
+}
+
+test "vim keys disabled when filterable" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .filterable = true });
+    defer fp.deinit();
+
+    // 'j' should go to filter, not move down
+    _ = fp.handleEvent(.{ .key = .{ .char = 'j' } });
+    try std.testing.expectEqual(@as(usize, 0), fp.selected);
+    try std.testing.expectEqualStrings("j", fp.filterValue());
+}
+
+test "filter reset on directory change" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .filterable = true });
+    defer fp.deinit();
+
+    // First, find a directory in the unfiltered list
+    var dir_fi: ?usize = null;
+    for (fp.filtered_indices.items, 0..) |entry_idx, fi| {
+        if (fp.entries.items[entry_idx].kind == .directory) {
+            dir_fi = fi;
+            break;
+        }
+    }
+    if (dir_fi == null) return;
+
+    // Type a filter, then clear it so we can select the directory
+    _ = fp.handleEvent(.{ .key = .{ .char = 'x' } });
+    try std.testing.expectEqualStrings("x", fp.filterValue());
+    // Clear filter to restore all entries
+    _ = fp.handleEvent(.{ .key = .escape });
+
+    // Select a directory and enter it
+    fp.selected = dir_fi.?;
+    _ = fp.handleEvent(.{ .key = .enter });
+    // Filter should be cleared after directory change
+    try std.testing.expectEqualStrings("", fp.filterValue());
+}
+
+test "left arrow goes to parent when filterable" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, "src", .{ .filterable = true });
+    defer fp.deinit();
+
+    const original_path_len = fp.current_path.items.len;
+    _ = fp.handleEvent(.{ .key = .left });
+    try std.testing.expect(fp.current_path.items.len < original_path_len);
+}
+
+test "containsCaseInsensitive" {
+    try std.testing.expect(containsCaseInsensitive("Apple", "app"));
+    try std.testing.expect(containsCaseInsensitive("Apple", "PLE"));
+    try std.testing.expect(containsCaseInsensitive("Apple", "apple"));
+    try std.testing.expect(!containsCaseInsensitive("Apple", "xyz"));
+    try std.testing.expect(containsCaseInsensitive("Apple", ""));
+    try std.testing.expect(!containsCaseInsensitive("", "a"));
+}
+
+test "render with filterable" {
+    const allocator = std.testing.allocator;
+    var fp = FilePicker.init(allocator, ".", .{ .filterable = true, .filter_prefix = "/ " });
+    defer fp.deinit();
+
+    var buf: [8192]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try fp.render(fbs.writer());
+
+    const output = fbs.getWritten();
+    try std.testing.expect(std.mem.indexOf(u8, output, "/ ") != null);
 }
