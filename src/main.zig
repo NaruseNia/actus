@@ -23,23 +23,21 @@ pub fn main() !void {
     });
     defer selector.deinit();
 
-    const WithHL = actus.WithHelpLine(actus.ListView);
-    var with_help = WithHL.init(&selector, .{});
-    var titled = actus.WithTitle(WithHL).init(&with_help, .{
+    var d = actus.Decorated(actus.ListView).init(&selector, .{
         .title = "Select a demo:",
     });
 
     {
         var app = try actus.App.init();
         errdefer app.deinit();
-        try app.run(&titled);
+        try app.run(&d);
         app.deinit();
     }
 
     // Clean up selector UI
     var cleanup_buf: [actus.Terminal.render_buf_size]u8 = undefined;
     var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
-    try titled.cleanup(cleanup_fbs.writer(), 1);
+    try d.cleanup(cleanup_fbs.writer(), 1);
     try stdout.writeAll(cleanup_fbs.getWritten());
 
     if (selector.isCancelled()) {
@@ -99,20 +97,18 @@ fn runListViewDemo(allocator: std.mem.Allocator, stdout: std.fs.File, config: ac
     var lv = actus.ListView.init(allocator, &items, config);
     defer lv.deinit();
 
-    const WithHL = actus.WithHelpLine(actus.ListView);
-    var with_help = WithHL.init(&lv, .{});
-    var titled = actus.WithTitle(WithHL).init(&with_help, .{
+    var d = actus.Decorated(actus.ListView).init(&lv, .{
         .title = "Pick one fruit:",
     });
 
     var app = try actus.App.init();
     errdefer app.deinit();
-    try app.run(&titled);
+    try app.run(&d);
     app.deinit();
 
     var cleanup_buf: [actus.Terminal.render_buf_size]u8 = undefined;
     var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
-    try titled.cleanup(cleanup_fbs.writer(), 1);
+    try d.cleanup(cleanup_fbs.writer(), 1);
     try stdout.writeAll(cleanup_fbs.getWritten());
 
     if (lv.isCancelled()) {
@@ -137,20 +133,18 @@ fn runFilePickerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     });
     defer file_picker.deinit();
 
-    const WithHL_FP = actus.WithHelpLine(actus.FilePicker);
-    var with_help = WithHL_FP.init(&file_picker, .{});
-    var titled = actus.WithTitle(WithHL_FP).init(&with_help, .{
+    var d = actus.Decorated(actus.FilePicker).init(&file_picker, .{
         .title = "Select a file:",
     });
 
     var app = try actus.App.init();
     errdefer app.deinit();
-    try app.run(&titled);
+    try app.run(&d);
     app.deinit();
 
     var cleanup_buf: [actus.Terminal.render_buf_size]u8 = undefined;
     var cleanup_fbs = std.io.fixedBufferStream(&cleanup_buf);
-    try titled.cleanup(cleanup_fbs.writer(), 1);
+    try d.cleanup(cleanup_fbs.writer(), 1);
     try stdout.writeAll(cleanup_fbs.getWritten());
 
     if (file_picker.isCancelled()) {

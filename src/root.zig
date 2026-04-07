@@ -12,6 +12,7 @@ pub const ListView = @import("widgets/ListView.zig");
 pub const HelpLine = @import("widgets/HelpLine.zig");
 pub const WithHelpLine = @import("widgets/WithHelpLine.zig").WithHelpLine;
 pub const WithTitle = @import("widgets/WithTitle.zig").WithTitle;
+pub const Decorated = @import("widgets/Decorated.zig").Decorated;
 pub const FilePicker = @import("widgets/FilePicker.zig");
 pub const unicode = @import("unicode.zig");
 pub const layout = @import("layout.zig");
@@ -29,6 +30,7 @@ test {
     _ = HelpLine;
     _ = @import("widgets/WithHelpLine.zig");
     _ = @import("widgets/WithTitle.zig");
+    _ = @import("widgets/Decorated.zig");
     _ = @import("cursor_tracker.zig");
     _ = FilePicker;
     _ = unicode;
