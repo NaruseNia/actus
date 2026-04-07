@@ -2,24 +2,31 @@ const std = @import("std");
 const actus = @import("actus");
 
 pub fn main() !void {
-    var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer _ = gpa_state.deinit();
-    const allocator = gpa_state.allocator();
+    const items = [_][]const u8{
+        "Apple",
+        "Banana",
+        "Cherry",
+        "Durian",
+        "Elderberry",
+        "Fig",
+        "Grape",
+    };
 
-    var text_input = actus.TextInput.init(allocator, .{
-        .placeholder = "Type your name...",
-        .max_length = 50,
+    var list_view = actus.ListView.init(&items, .{
+        .max_visible = 5,
     });
-    defer text_input.deinit();
 
     var app = try actus.App.init();
     defer app.deinit();
 
-    try app.run(&text_input);
+    try app.run(&list_view);
 
-    // Print the result after the loop ends
     const stdout = std.fs.File.stdout();
-    try stdout.writeAll("You entered: ");
-    try stdout.writeAll(text_input.value());
-    try stdout.writeAll("\n");
+    if (list_view.isCancelled()) {
+        try stdout.writeAll("Cancelled.\n");
+    } else if (list_view.selectedItem()) |item| {
+        try stdout.writeAll("You selected: ");
+        try stdout.writeAll(item);
+        try stdout.writeAll("\n");
+    }
 }
