@@ -8,15 +8,20 @@ Build interactive CLI applications with composable, reusable widgets. Supports m
 
 - **Cross-platform** -- Raw terminal control via termios (macOS/Linux) and Console API (Windows), with ANSI escape sequences for rendering
 - **Composable widgets** -- Each widget implements a common interface (`handleEvent` / `render` / `needsRender`) driven by an external event loop
+- **Generic wrappers** -- `WithTitle` and `WithHelpLine` wrap any widget to add a title or key-binding display
+- **Theming** -- Centralized `Theme` struct with `Style` builder for colors and font attributes
 - **UTF-8 native** -- Full multibyte Unicode support for international text input
 
 ### Widgets
 
-| Widget | Status | Description |
-|---|---|---|
-| **TextInput** | Available | Single-line text input with placeholder, password masking, max length, and character filtering |
-| **ListView** | Planned | Scrollable list with selectable items |
-| **Progress** | Planned | Progress bar / spinner |
+| Widget | Description |
+|---|---|
+| **TextInput** | Single-line text input with placeholder, password masking, max length, and character filtering |
+| **ListView** | Scrollable list with selectable items, optional filtering, item count display |
+| **FilePicker** | File/directory browser with navigation, metadata display, filtering, and extension filtering |
+| **HelpLine** | Read-only key-binding display (typically used via `WithHelpLine`) |
+| **WithHelpLine** | Generic wrapper that adds a help line below any widget |
+| **WithTitle** | Generic wrapper that adds a styled title line above any widget |
 
 ## Requirements
 
@@ -52,9 +57,9 @@ const std = @import("std");
 const actus = @import("actus");
 
 pub fn main() !void {
-    var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
-    defer _ = gpa_state.deinit();
-    const allocator = gpa_state.allocator();
+    var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
     var text_input = actus.TextInput.init(allocator, .{
         .placeholder = "Type your name...",
@@ -64,45 +69,24 @@ pub fn main() !void {
 
     var app = try actus.App.init();
     defer app.deinit();
-
     try app.run(&text_input);
 
     const stdout = std.fs.File.stdout();
-    try stdout.writeAll("You entered: ");
-    try stdout.writeAll(text_input.value());
-    try stdout.writeAll("\n");
+    if (text_input.isConfirmed()) {
+        try stdout.writeAll("You entered: ");
+        try stdout.writeAll(text_input.value());
+        try stdout.writeAll("\n");
+    }
 }
 ```
 
-### TextInput Options
-
-```zig
-actus.TextInput.init(allocator, .{
-    .placeholder = "Enter password...",  // shown when empty
-    .mask_char = '*',                    // password masking
-    .max_length = 128,                   // codepoint limit
-    .allowed_chars = "0123456789",       // ASCII character filter
-});
-```
-
-### Keybindings
-
-| Key | Action |
-|---|---|
-| Printable characters | Insert at cursor |
-| Left / Right | Move cursor |
-| Home / Ctrl-A | Move to start |
-| End / Ctrl-E | Move to end |
-| Backspace | Delete before cursor |
-| Delete | Delete after cursor |
-| Enter | Confirm input |
-| Ctrl-C | Exit |
+See [docs/guide.md](docs/guide.md) for full usage guide and API reference.
 
 ## Development
 
 ```sh
 zig build          # Build the library and example executable
-zig build run      # Run the TextInput demo
+zig build run      # Run the interactive demo selector
 zig build test     # Run all unit tests
 ```
 
@@ -110,15 +94,25 @@ zig build test     # Run all unit tests
 
 ```
 src/
-  root.zig                -- Library entry point (barrel re-exports)
-  event.zig               -- Event / Key type definitions
-  Terminal.zig             -- Cross-platform raw mode + ANSI helpers
-  input.zig               -- stdin -> Event parser (UTF-8, escape sequences)
-  Widget.zig              -- Comptime widget interface + HandleResult
-  App.zig                 -- Reusable event loop
+  root.zig              -- Library entry point (barrel re-exports)
+  event.zig             -- Event / Key type definitions
+  Terminal.zig           -- Cross-platform raw mode + ANSI helpers
+  input.zig             -- stdin -> Event parser (UTF-8, escape sequences)
+  Widget.zig            -- Comptime widget interface + HandleResult + LayoutInfo
+  App.zig               -- Reusable event loop
+  Style.zig             -- ANSI styling (colors, font attributes)
+  Theme.zig             -- Theme configuration (primary, accent, muted, text)
+  layout.zig            -- Shared widget layout detection
+  unicode.zig           -- Shared UTF-8 helpers
+  cursor_tracker.zig    -- Cursor position analysis from ANSI output
   widgets/
-    TextInput.zig          -- TextInput widget
-  main.zig                -- Example app
+    TextInput.zig       -- Single-line text input
+    ListView.zig        -- Scrollable selectable list
+    FilePicker.zig      -- File/directory browser
+    HelpLine.zig        -- Key-binding display
+    WithHelpLine.zig    -- Generic wrapper: help line below widget
+    WithTitle.zig       -- Generic wrapper: title above widget
+  main.zig              -- Interactive demo app
 ```
 
 ## Platform Support
