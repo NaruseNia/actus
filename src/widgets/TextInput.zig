@@ -4,6 +4,7 @@ const Key = @import("../event.zig").Key;
 const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
 const Style = @import("../Style.zig");
+const Theme = @import("../Theme.zig");
 
 const TextInput = @This();
 
@@ -22,8 +23,10 @@ pub const Config = struct {
     max_length: ?usize = null,
     /// If set, only these ASCII bytes are accepted as input.
     allowed_chars: ?[]const u8 = null,
-    /// Style applied to the placeholder text.
-    placeholder_style: Style = Style.fg(.bright_black),
+    /// Style applied to the placeholder text. Overrides theme.muted when set.
+    placeholder_style: ?Style = null,
+    /// Theme providing default styles.
+    theme: Theme = Theme.default,
 };
 
 // -- State --
@@ -78,7 +81,8 @@ pub fn render(self: *TextInput, writer: anytype) !void {
     if (text.len == 0) {
         // Show placeholder in configured style
         if (self.config.placeholder.len > 0) {
-            try self.config.placeholder_style.write(writer, self.config.placeholder);
+            const ph_style = self.config.placeholder_style orelse self.config.theme.muted;
+            try ph_style.write(writer, self.config.placeholder);
         }
         try Terminal.moveCursorTo(writer, 0);
     } else if (self.config.mask_char) |mask| {
@@ -430,6 +434,41 @@ test "handleEvent returns ignored for unhandled keys" {
 
     const result = ti.handleEvent(.{ .key = .escape });
     try std.testing.expectEqual(Widget.HandleResult.ignored, result);
+}
+
+test "render placeholder uses custom theme" {
+    const allocator = std.testing.allocator;
+    const custom_theme = Theme{ .muted = Style.fg(.red) };
+    var ti = TextInput.init(allocator, .{ .placeholder = "hello", .theme = custom_theme });
+    defer ti.deinit();
+
+    var buf: [256]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try ti.render(fbs.writer());
+
+    const output = fbs.getWritten();
+    // red fg = \x1b[31m
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[31m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "hello") != null);
+}
+
+test "placeholder_style overrides theme" {
+    const allocator = std.testing.allocator;
+    var ti = TextInput.init(allocator, .{
+        .placeholder = "hello",
+        .placeholder_style = Style.fg(.green),
+        .theme = Theme{ .muted = Style.fg(.red) },
+    });
+    defer ti.deinit();
+
+    var buf: [256]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try ti.render(fbs.writer());
+
+    const output = fbs.getWritten();
+    // green fg = \x1b[32m, not red \x1b[31m
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[32m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[31m") == null);
 }
 
 test "codepointCount" {
