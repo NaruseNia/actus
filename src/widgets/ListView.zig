@@ -435,14 +435,7 @@ fn visibleCount(self: *const ListView) usize {
 
 // -- Helpers --
 
-fn prevCodepointLen(bytes: []const u8, pos: usize) usize {
-    if (pos == 0) return 0;
-    var i = pos - 1;
-    while (i > 0 and (bytes[i] & 0xC0) == 0x80) {
-        i -= 1;
-    }
-    return pos - i;
-}
+const prevCodepointLen = @import("../unicode.zig").prevCodepointLen;
 
 // -- Tests --
 
