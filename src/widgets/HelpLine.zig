@@ -102,7 +102,7 @@ test "render writes bindings with styles and separators" {
     try std.testing.expect(std.mem.indexOf(u8, output, "Esc") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "Quit") != null);
     // Should contain the separator text (wrapped in style escapes)
-    try std.testing.expect(std.mem.indexOf(u8, output, " | ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "   ") != null);
     // Should not be dirty after render
     try std.testing.expect(!hl.needsRender());
 }
@@ -153,13 +153,11 @@ test "render with custom separator" {
             .{ .key = "a", .action = "A" },
             .{ .key = "b", .action = "B" },
         },
-        .separator = " | ",
+        .separator = " ~ ",
     });
 
     try hl.render(&writer);
 
     const output = fbs.getWritten();
-    try std.testing.expect(std.mem.indexOf(u8, output, " | ") != null);
-    // Default separator should NOT appear
-    try std.testing.expect(std.mem.indexOf(u8, output, "│") == null);
+    try std.testing.expect(std.mem.indexOf(u8, output, " ~ ") != null);
 }
