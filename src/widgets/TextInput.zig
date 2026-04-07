@@ -3,6 +3,7 @@ const Event = @import("../event.zig").Event;
 const Key = @import("../event.zig").Key;
 const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
+const Style = @import("../Style.zig");
 
 const TextInput = @This();
 
@@ -21,6 +22,8 @@ pub const Config = struct {
     max_length: ?usize = null,
     /// If set, only these ASCII bytes are accepted as input.
     allowed_chars: ?[]const u8 = null,
+    /// Style applied to the placeholder text.
+    placeholder_style: Style = Style.fg(.bright_black),
 };
 
 // -- State --
@@ -73,11 +76,9 @@ pub fn render(self: *TextInput, writer: anytype) !void {
 
     const text = self.buffer.items;
     if (text.len == 0) {
-        // Show placeholder in dim style
+        // Show placeholder in configured style
         if (self.config.placeholder.len > 0) {
-            try writer.writeAll("\x1b[2m"); // dim
-            try writer.writeAll(self.config.placeholder);
-            try writer.writeAll("\x1b[0m"); // reset
+            try self.config.placeholder_style.write(writer, self.config.placeholder);
         }
         try Terminal.moveCursorTo(writer, 0);
     } else if (self.config.mask_char) |mask| {
@@ -383,7 +384,7 @@ test "render placeholder when empty" {
 
     const output = fbs.getWritten();
     try std.testing.expect(std.mem.indexOf(u8, output, "type here") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[2m") != null); // dim
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[90m") != null); // bright_black (gray)
 }
 
 test "render with mask char" {
