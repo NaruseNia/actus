@@ -114,6 +114,8 @@ pub fn render(self: *ListView, writer: anytype) !void {
         try Terminal.moveCursorUp(writer, @intCast(self.last_rendered_lines - 1));
     }
 
+    // Convention: \n is written BEFORE each new line (except the first).
+    // The cursor always ends on the last rendered line (no trailing \n).
     var total_lines: usize = 0;
 
     // Filter input line
@@ -125,13 +127,14 @@ pub fn render(self: *ListView, writer: anytype) !void {
         } else {
             try writer.writeAll(self.filter_buffer.items);
         }
-        try writer.writeAll("\n");
         total_lines += 1;
     }
 
     const count = self.filteredCount();
 
     if (count == 0) {
+        // Empty placeholder line
+        if (total_lines > 0) try writer.writeAll("\n");
         try Terminal.clearLine(writer);
         total_lines += 1;
     } else {
@@ -141,6 +144,7 @@ pub fn render(self: *ListView, writer: anytype) !void {
 
         for (start..end) |fi| {
             const item_idx = self.filtered_indices.items[fi];
+            if (total_lines > 0) try writer.writeAll("\n");
             try Terminal.clearLine(writer);
             if (fi == self.selected) {
                 try self.config.selected_style.writeStart(writer);
@@ -153,13 +157,13 @@ pub fn render(self: *ListView, writer: anytype) !void {
                 try writer.writeAll(self.items[item_idx]);
                 try self.config.normal_style.writeEnd(writer);
             }
-            try writer.writeAll("\n");
             total_lines += 1;
         }
     }
 
     // Count line
     if (self.config.show_count) {
+        if (total_lines > 0) try writer.writeAll("\n");
         try Terminal.clearLine(writer);
         if (self.filter_buffer.items.len > 0) {
             try self.config.count_style.print(writer, "{d}/{d} ({d} total)", .{
@@ -174,15 +178,6 @@ pub fn render(self: *ListView, writer: anytype) !void {
             });
         }
         total_lines += 1;
-    }
-
-    // For non-count, non-filter: the last line had a trailing \n, go back up one
-    // We need the cursor to end on the last rendered line.
-    // Since we always write \n after each item line, move up 1 if we ended with items
-    if (count > 0 and !self.config.show_count) {
-        // We wrote an extra \n after the last item line; move up
-        try Terminal.moveCursorUp(writer, 1);
-        total_lines -= 1;
     }
 
     // Clear any leftover lines from a previous longer render
