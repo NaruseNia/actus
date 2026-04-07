@@ -123,17 +123,30 @@ fn handleKey(self: *TextInput, key: Key) Widget.HandleResult {
             self.moveCursorRight();
             return .consumed;
         },
-        .home, .ctrl => |v| {
-            // Home key or Ctrl-A (value 'a')
-            if (key == .ctrl and v != 'a') {
-                return .ignored;
-            }
+        .home => {
             self.cursor_byte = 0;
             self.cursor_col = 0;
             self.dirty = true;
             return .consumed;
         },
-        .end, => {
+        .ctrl => |c| {
+            if (c == 'a') {
+                // Ctrl-A = Home
+                self.cursor_byte = 0;
+                self.cursor_col = 0;
+                self.dirty = true;
+                return .consumed;
+            }
+            if (c == 'e') {
+                // Ctrl-E = End
+                self.cursor_byte = self.buffer.items.len;
+                self.cursor_col = codepointCount(self.buffer.items);
+                self.dirty = true;
+                return .consumed;
+            }
+            return .ignored;
+        },
+        .end => {
             self.cursor_byte = self.buffer.items.len;
             self.cursor_col = codepointCount(self.buffer.items);
             self.dirty = true;
@@ -163,7 +176,7 @@ fn insertChar(self: *TextInput, cp: u21) void {
     }
 
     var encoded: [4]u8 = undefined;
-    const len = std.unicode.utf8Encode(&encoded, cp) catch return;
+    const len = std.unicode.utf8Encode(cp, &encoded) catch return;
     self.buffer.insertSlice(self.allocator, self.cursor_byte, encoded[0..len]) catch return;
     self.cursor_byte += len;
     self.cursor_col += 1;

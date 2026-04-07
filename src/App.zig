@@ -67,7 +67,7 @@ pub fn run(self: *App, widget: anytype) !void {
 }
 
 fn writeToStdout(_: *const App, bytes: []const u8) !void {
-    const stdout = std.io.getStdOut();
+    const stdout = std.fs.File.stdout();
     try stdout.writeAll(bytes);
 }
 

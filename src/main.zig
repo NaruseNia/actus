@@ -2,26 +2,24 @@ const std = @import("std");
 const actus = @import("actus");
 
 pub fn main() !void {
-    // Prints to stderr, ignoring potential errors.
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    try actus.bufferedPrint();
-}
+    var gpa_state: std.heap.GeneralPurposeAllocator(.{}) = .init;
+    defer _ = gpa_state.deinit();
+    const allocator = gpa_state.allocator();
 
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
+    var text_input = actus.TextInput.init(allocator, .{
+        .placeholder = "Type your name...",
+        .max_length = 50,
+    });
+    defer text_input.deinit();
 
-test "fuzz example" {
-    const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
-            _ = context;
-            // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", input));
-        }
-    };
-    try std.testing.fuzz(Context{}, Context.testOne, .{});
+    var app = try actus.App.init();
+    defer app.deinit();
+
+    try app.run(&text_input);
+
+    // Print the result after the loop ends
+    const stdout = std.fs.File.stdout();
+    try stdout.writeAll("You entered: ");
+    try stdout.writeAll(text_input.value());
+    try stdout.writeAll("\n");
 }
