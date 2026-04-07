@@ -2,26 +2,53 @@
 
 ## Project Overview
 
-actus is a terminal UI widget library for Zig. It provides reusable CLI widgets (ListView, TextInput, Progress, etc.) that can be composed to build interactive terminal applications.
+actus is a cross-platform terminal UI widget library for Zig. It provides reusable CLI widgets (TextInput, ListView, Progress, etc.) that can be composed to build interactive terminal applications. Targets macOS, Linux, and Windows.
 
 ## Build & Test
 
 ```sh
 zig build          # Build the library and example executable
-zig build run      # Run the example app
-zig build test     # Run all tests (module + executable tests)
+zig build run      # Run the TextInput demo
+zig build test     # Run all unit tests
 ```
 
 ## Project Structure
 
-- `src/root.zig` - Library entry point (public API exposed to consumers)
-- `src/main.zig` - Example executable / development playground
-- `build.zig` - Build configuration; exposes `actus` module for consumers
-- `build.zig.zon` - Package metadata (minimum Zig version: 0.15.2)
+```
+src/
+  root.zig              -- Library entry point; barrel re-exports all public API
+  event.zig             -- Event / Key union types shared by all widgets
+  Terminal.zig          -- Cross-platform raw mode (termios / Win Console API) + ANSI helpers
+  input.zig             -- Stdin byte reader + escape sequence parser -> Event
+  Widget.zig            -- Comptime widget interface (assertIsWidget) + HandleResult enum
+  App.zig               -- Reusable event loop (read -> dispatch -> render)
+  widgets/
+    TextInput.zig       -- TextInput widget (placeholder, mask, validation)
+  main.zig              -- Example executable
+```
 
-## Conventions
+## Architecture & Conventions
 
-- Library code goes in `src/root.zig` (or files re-exported from it)
-- The `actus` module name is used for both the package export and internal import
-- Tests are colocated with source code using Zig's `test` blocks
-- Target Zig version: 0.15.2+
+- **Widget interface**: Widgets implement `handleEvent(Event) HandleResult`, `render(writer) !void`, `needsRender() bool`. Checked at comptime via `Widget.assertIsWidget(T)`.
+- **No vtable**: Uses comptime duck typing (`anytype`) instead of runtime vtable. Simpler and zero-cost. Vtable can be added later if heterogeneous widget collections are needed.
+- **Terminal abstraction**: `Terminal.zig` handles platform differences (POSIX termios vs Windows Console API). ANSI helpers use `anytype` writer so they work with any writer type.
+- **Input parsing**: `input.zig` parses raw bytes into `Event` values. On Windows with VT input enabled, escape sequences match POSIX format.
+- **Cross-platform goal**: macOS, Linux, Windows. Platform-specific code is isolated in `Terminal.zig` (raw mode) and `input.zig` (byte reading). Widgets and App are platform-agnostic.
+- **UTF-8 native**: TextInput stores UTF-8 bytes in `ArrayListUnmanaged(u8)`, tracks both byte offset and codepoint column for cursor.
+
+## Zig 0.15 Specifics
+
+- `std.fs.File.stdout()` instead of deprecated `std.io.getStdOut()`
+- `ArrayListUnmanaged` uses `.empty` init, allocator passed to each mutating call
+- `std.unicode.utf8Encode(codepoint, &buf)` argument order (codepoint first)
+- termios flags are packed structs with named bool fields (e.g., `raw.lflag.ECHO = false`)
+- `cc` array indexed via `@intFromEnum(std.c.V.MIN)`
+- `std.io.fixedBufferStream` for testing writers
+
+## Adding New Widgets
+
+1. Create `src/widgets/YourWidget.zig`
+2. Implement `handleEvent`, `render`, `needsRender`
+3. Add `comptime { Widget.assertIsWidget(@This()); }` at top
+4. Re-export from `src/root.zig`
+5. Add tests in the same file
