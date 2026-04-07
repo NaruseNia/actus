@@ -13,6 +13,7 @@ pub const HelpLine = @import("widgets/HelpLine.zig");
 pub const WithHelpLine = @import("widgets/WithHelpLine.zig").WithHelpLine;
 pub const FilePicker = @import("widgets/FilePicker.zig");
 pub const unicode = @import("unicode.zig");
+pub const layout = @import("layout.zig");
 
 test {
     _ = Terminal;
@@ -29,4 +30,5 @@ test {
     _ = @import("cursor_tracker.zig");
     _ = FilePicker;
     _ = unicode;
+    _ = layout;
 }

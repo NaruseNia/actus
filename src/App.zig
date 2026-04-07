@@ -4,6 +4,7 @@ const Terminal = @import("Terminal.zig");
 const input = @import("input.zig");
 const Event = @import("event.zig").Event;
 const Widget = @import("Widget.zig");
+const layout = @import("layout.zig");
 
 const App = @This();
 
@@ -84,7 +85,7 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     // Initial render: use \n to establish lines on the terminal.
     try Terminal.hideCursor(&writer);
     try widget.render(&writer);
-    const initial = getWidgetLayout(widget, &fbs);
+    const initial = layout.getWidgetLayout(widget, fbs.getWritten());
     // Use \n to scroll and create lines for the first time.
     for (0..initial.lines_below + 1) |_| {
         try writer.writeAll("\n");
@@ -121,14 +122,14 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
         if (widget.needsRender() or help_line.needsRender()) {
             try Terminal.hideCursor(&writer);
             try widget.render(&writer);
-            const layout = getWidgetLayout(widget, &fbs);
+            const wl = layout.getWidgetLayout(widget, fbs.getWritten());
             // Re-render: lines already exist, use cursor movement instead of \n.
-            try Terminal.moveCursorDown(&writer, layout.lines_below + 1);
+            try Terminal.moveCursorDown(&writer, wl.lines_below + 1);
             try writer.writeAll("\r");
             try help_line.render(&writer);
             try Terminal.clearFromCursor(&writer);
-            try Terminal.moveCursorUp(&writer, layout.lines_below + 1);
-            if (layout.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
+            try Terminal.moveCursorUp(&writer, wl.lines_below + 1);
+            if (wl.cursor_col) |col| try Terminal.moveCursorTo(&writer, col);
             try Terminal.showCursor(&writer);
             try self.writeToStdout(fbs.getWritten());
             fbs.reset();
@@ -138,42 +139,6 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     // Final newline so the shell prompt doesn't overlap
     try self.writeToStdout("\r\n");
 }
-
-/// Layout info needed to position the help line below a widget.
-const WidgetLayout = struct {
-    /// Number of lines from the cursor to the bottom of the widget.
-    lines_below: u16,
-    /// Cursor column to restore, or null if not set.
-    cursor_col: ?u16,
-};
-
-/// Get widget layout after render. Prefers the widget's own fields
-/// (last_rendered_lines, cursor_line) over byte-level analysis, because
-/// CursorTracker can be fooled by cursor movements the widget makes
-/// to clear leftover lines from a previous taller render.
-fn getWidgetLayout(widget: anytype, fbs: anytype) WidgetLayout {
-    const WidgetT = @TypeOf(widget.*);
-    const has_rendered_lines = @hasField(WidgetT, "last_rendered_lines");
-    const has_cursor_line = @hasField(WidgetT, "cursor_line");
-
-    if (has_rendered_lines and has_cursor_line) {
-        // Widget reports its own height — use it directly.
-        const total = widget.last_rendered_lines;
-        const cursor_row = widget.cursor_line;
-        const bottom = if (total > 0) total - 1 else 0;
-        const lines_below: u16 = @intCast(bottom -| cursor_row);
-        // Scan the rendered output for the last \x1b[<N>G to find cursor column.
-        const col = CursorTracker.findLastColumn(fbs.getWritten());
-        return .{ .lines_below = lines_below, .cursor_col = col };
-    } else {
-        // Fallback: analyze the raw output bytes.
-        const info = CursorTracker.analyze(fbs.getWritten());
-        const lines_below: u16 = @intCast(info.max_row -| info.cursor_row);
-        return .{ .lines_below = lines_below, .cursor_col = info.cursor_col };
-    }
-}
-
-const CursorTracker = @import("cursor_tracker.zig");
 
 fn writeToStdout(_: *const App, bytes: []const u8) !void {
     const stdout = std.fs.File.stdout();

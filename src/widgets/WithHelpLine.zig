@@ -3,7 +3,7 @@ const Event = @import("../event.zig").Event;
 const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
 const HelpLine = @import("HelpLine.zig");
-const CursorTracker = @import("../cursor_tracker.zig");
+const widget_layout = @import("../layout.zig");
 
 /// Wraps any widget with a HelpLine displayed below it.
 /// The composite satisfies the Widget interface and can be used with `App.run`.
@@ -75,7 +75,7 @@ pub fn WithHelpLine(comptime ChildWidget: type) type {
 
             try self.child.render(&child_writer);
 
-            const layout = self.getChildLayout(child_fbs.getWritten());
+            const wl = widget_layout.getWidgetLayout(self.child, child_fbs.getWritten());
 
             // Forward child output to the real writer
             try writer.writeAll(child_fbs.getWritten());
@@ -83,28 +83,28 @@ pub fn WithHelpLine(comptime ChildWidget: type) type {
             // Position and render help line
             if (self.first_render) {
                 // Initial render: use \n to scroll terminal and create lines
-                for (0..layout.lines_below + 1) |_| {
+                for (0..wl.lines_below + 1) |_| {
                     try writer.writeAll("\n");
                 }
                 try self.help_line.render(writer);
                 try Terminal.clearFromCursor(writer);
-                try Terminal.moveCursorUp(writer, @intCast(layout.lines_below + 1));
+                try Terminal.moveCursorUp(writer, @intCast(wl.lines_below + 1));
                 self.first_render = false;
             } else {
                 // Subsequent renders: lines already exist, use cursor movement
-                try Terminal.moveCursorDown(writer, @intCast(layout.lines_below + 1));
+                try Terminal.moveCursorDown(writer, @intCast(wl.lines_below + 1));
                 try writer.writeAll("\r");
                 try self.help_line.render(writer);
                 try Terminal.clearFromCursor(writer);
-                try Terminal.moveCursorUp(writer, @intCast(layout.lines_below + 1));
+                try Terminal.moveCursorUp(writer, @intCast(wl.lines_below + 1));
             }
 
             // Restore cursor column
-            if (layout.cursor_col) |col| try Terminal.moveCursorTo(writer, col);
+            if (wl.cursor_col) |col| try Terminal.moveCursorTo(writer, col);
 
             // Update composite layout fields for potential nesting
-            self.last_rendered_lines = layout.child_total + 1; // +1 for help line
-            self.cursor_line = layout.cursor_row;
+            self.last_rendered_lines = wl.total_lines + 1; // +1 for help line
+            self.cursor_line = wl.cursor_row;
         }
 
         /// Clear all rendered lines (child + help line) from the terminal.
@@ -136,40 +136,6 @@ pub fn WithHelpLine(comptime ChildWidget: type) type {
             }
         }
 
-        const ChildLayout = struct {
-            lines_below: u16,
-            cursor_col: ?u16,
-            child_total: usize,
-            cursor_row: usize,
-        };
-
-        fn getChildLayout(self: *const Self, rendered_bytes: []const u8) ChildLayout {
-            const has_rendered_lines = @hasField(ChildWidget, "last_rendered_lines");
-            const has_cursor_line = @hasField(ChildWidget, "cursor_line");
-
-            if (has_rendered_lines and has_cursor_line) {
-                const total = self.child.last_rendered_lines;
-                const cursor_row = self.child.cursor_line;
-                const bottom = if (total > 0) total - 1 else 0;
-                const lines_below: u16 = @intCast(bottom -| cursor_row);
-                const col = CursorTracker.findLastColumn(rendered_bytes);
-                return .{
-                    .lines_below = lines_below,
-                    .cursor_col = col,
-                    .child_total = total,
-                    .cursor_row = cursor_row,
-                };
-            } else {
-                const info = CursorTracker.analyze(rendered_bytes);
-                const lines_below: u16 = @intCast(info.max_row -| info.cursor_row);
-                return .{
-                    .lines_below = lines_below,
-                    .cursor_col = info.cursor_col,
-                    .child_total = info.max_row + 1,
-                    .cursor_row = info.cursor_row,
-                };
-            }
-        }
     };
 }
 
