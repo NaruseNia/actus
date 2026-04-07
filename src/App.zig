@@ -147,6 +147,10 @@ fn renderWithHelpLine(
     try writer.writeAll("\r\n");
     try help_line.render(writer);
 
+    // Clear any leftover lines below the help line from a previous
+    // taller render (e.g. widget shrank due to filtering).
+    try Terminal.clearFromCursor(writer);
+
     // Move cursor back to where the widget expects it.
     const help_lines_below: u16 = @intCast(lines_below_cursor + 1);
     try Terminal.moveCursorUp(writer, help_lines_below);
