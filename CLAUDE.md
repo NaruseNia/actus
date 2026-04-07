@@ -45,6 +45,12 @@ src/
 - `cc` array indexed via `@intFromEnum(std.c.V.MIN)`
 - `std.io.fixedBufferStream` for testing writers
 
+## Workflow Rules
+
+- **Commit per task**: Commit after each logical unit of work (feature, bug fix, etc.). Do not bundle multiple tasks into a single commit.
+- **Write tests**: Every new feature or bug fix must include tests. Run `zig build test` and confirm all tests pass before committing.
+- **Ask when uncertain**: If the spec or intent is unclear, do not guess. Use `AskUserQuestion` to ask the user for clarification.
+
 ## Adding New Widgets
 
 1. Create `src/widgets/YourWidget.zig`
