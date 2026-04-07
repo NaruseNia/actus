@@ -4,6 +4,7 @@ const Key = @import("../event.zig").Key;
 const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
 const Style = @import("../Style.zig");
+const Theme = @import("../Theme.zig");
 
 const ListView = @This();
 
@@ -16,26 +17,28 @@ comptime {
 pub const Config = struct {
     /// Maximum number of visible rows. null = show all items.
     max_visible: ?usize = null,
-    /// Style applied to the selected item.
-    selected_style: Style = Style.fg(.cyan).setBold(),
-    /// Style applied to non-selected items.
-    normal_style: Style = .{},
+    /// Style applied to the selected item. Overrides theme.primary when set.
+    selected_style: ?Style = null,
+    /// Style applied to non-selected items. Overrides theme.text when set.
+    normal_style: ?Style = null,
     /// Prefix shown before the selected item.
     cursor: []const u8 = "> ",
     /// Prefix shown before non-selected items (should match cursor width).
     indent: []const u8 = "  ",
     /// Show item count at the bottom of the list.
     show_count: bool = false,
-    /// Style for the count line.
-    count_style: Style = Style.fg(.bright_black),
+    /// Style for the count line. Overrides theme.muted when set.
+    count_style: ?Style = null,
     /// Enable incremental filter/search mode.
     filterable: bool = false,
     /// Prefix shown before the filter input line.
     filter_prefix: []const u8 = "/ ",
     /// Placeholder shown when the filter is empty.
     filter_placeholder: []const u8 = "",
-    /// Style for the filter placeholder.
-    filter_placeholder_style: Style = Style.fg(.bright_black),
+    /// Style for the filter placeholder. Overrides theme.muted when set.
+    filter_placeholder_style: ?Style = null,
+    /// Theme providing default styles.
+    theme: Theme = Theme.default,
 };
 
 // -- State --
@@ -125,7 +128,8 @@ pub fn render(self: *ListView, writer: anytype) !void {
         try Terminal.clearLine(writer);
         try writer.writeAll(self.config.filter_prefix);
         if (self.filter_buffer.items.len == 0 and self.config.filter_placeholder.len > 0) {
-            try self.config.filter_placeholder_style.write(writer, self.config.filter_placeholder);
+            const fp_style = self.config.filter_placeholder_style orelse self.config.theme.muted;
+            try fp_style.write(writer, self.config.filter_placeholder);
         } else {
             try writer.writeAll(self.filter_buffer.items);
         }
@@ -149,15 +153,17 @@ pub fn render(self: *ListView, writer: anytype) !void {
             if (total_lines > 0) try writer.writeAll("\n");
             try Terminal.clearLine(writer);
             if (fi == self.selected) {
-                try self.config.selected_style.writeStart(writer);
+                const sel_style = self.config.selected_style orelse self.config.theme.primary;
+                try sel_style.writeStart(writer);
                 try writer.writeAll(self.config.cursor);
                 try writer.writeAll(self.items[item_idx]);
-                try self.config.selected_style.writeEnd(writer);
+                try sel_style.writeEnd(writer);
             } else {
-                try self.config.normal_style.writeStart(writer);
+                const norm_style = self.config.normal_style orelse self.config.theme.text;
+                try norm_style.writeStart(writer);
                 try writer.writeAll(self.config.indent);
                 try writer.writeAll(self.items[item_idx]);
-                try self.config.normal_style.writeEnd(writer);
+                try norm_style.writeEnd(writer);
             }
             total_lines += 1;
         }
@@ -167,14 +173,15 @@ pub fn render(self: *ListView, writer: anytype) !void {
     if (self.config.show_count) {
         if (total_lines > 0) try writer.writeAll("\n");
         try Terminal.clearLine(writer);
+        const cnt_style = self.config.count_style orelse self.config.theme.muted;
         if (self.filter_buffer.items.len > 0) {
-            try self.config.count_style.print(writer, "{d}/{d} ({d} total)", .{
+            try cnt_style.print(writer, "{d}/{d} ({d} total)", .{
                 if (count > 0) self.selected + 1 else @as(usize, 0),
                 count,
                 self.items.len,
             });
         } else {
-            try self.config.count_style.print(writer, "{d}/{d}", .{
+            try cnt_style.print(writer, "{d}/{d}", .{
                 if (count > 0) self.selected + 1 else @as(usize, 0),
                 count,
             });
@@ -707,6 +714,41 @@ test "render with filter and count shows total" {
     // Should show filtered count and total
     try std.testing.expect(std.mem.indexOf(u8, output, "1/2") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "(3 total)") != null);
+}
+
+test "render uses custom theme styles" {
+    const allocator = std.testing.allocator;
+    const items = [_][]const u8{ "alpha", "beta" };
+    const custom_theme = Theme{ .primary = Style.fg(.red).setBold() };
+    var lv = ListView.init(allocator, &items, .{ .theme = custom_theme });
+    defer lv.deinit();
+
+    var buf: [1024]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try lv.render(fbs.writer());
+
+    const output = fbs.getWritten();
+    // red+bold = \x1b[1;31m
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[1;31m") != null);
+}
+
+test "selected_style overrides theme" {
+    const allocator = std.testing.allocator;
+    const items = [_][]const u8{ "alpha", "beta" };
+    var lv = ListView.init(allocator, &items, .{
+        .selected_style = Style.fg(.green),
+        .theme = Theme{ .primary = Style.fg(.red) },
+    });
+    defer lv.deinit();
+
+    var buf: [1024]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try lv.render(fbs.writer());
+
+    const output = fbs.getWritten();
+    // green fg = \x1b[32m, not red \x1b[31m
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[32m") != null);
+    try std.testing.expect(std.mem.indexOf(u8, output, "\x1b[31m") == null);
 }
 
 test "unhandled key returns ignored" {
