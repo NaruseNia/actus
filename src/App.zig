@@ -35,7 +35,6 @@ pub fn run(self: *App, widget: anytype) !void {
     // Initial render
     try Terminal.hideCursor(&writer);
     try widget.render(&writer);
-    try Terminal.showCursor(&writer);
     try self.writeToStdout(fbs.getWritten());
     fbs.reset();
 
@@ -172,7 +171,6 @@ pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations:
     // Initial render
     try Terminal.hideCursor(&writer);
     try widget.render(&writer);
-    try Terminal.showCursor(&writer);
     try self.writeToStdout(fbs.getWritten());
     fbs.reset();
 
@@ -213,7 +211,6 @@ pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations:
         // Always re-render progress widgets (they animate)
         try Terminal.hideCursor(&writer);
         try widget.render(&writer);
-        try Terminal.showCursor(&writer);
         try self.writeToStdout(fbs.getWritten());
         fbs.reset();
 
@@ -236,6 +233,12 @@ pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations:
             std.posix.nanosleep(seconds, nanoseconds);
         }
     }
+
+    // Show cursor again before final newline
+    var final_buf: [Terminal.render_buf_size]u8 = undefined;
+    var final_fbs = std.io.fixedBufferStream(&final_buf);
+    try Terminal.showCursor(final_fbs.writer());
+    try self.writeToStdout(final_fbs.getWritten());
 
     // Final newline so the shell prompt doesn't overlap
     try self.writeToStdout("\r\n");
