@@ -169,7 +169,7 @@ fn runFilePickerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
 fn runSpinnerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     var spinner = actus.Spinner.init(allocator, .{
         .text = "Loading...",
-        .frames = actus.Spinner.presetFrames("pipes"),
+        // Use default frames (dot_cycle)
     });
     defer spinner.deinit();
 
@@ -185,7 +185,7 @@ fn runSpinnerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
 fn runSpinnerAnimatedDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     var spinner = actus.Spinner.init(allocator, .{
         .text = "Processing",
-        .frames = actus.Spinner.presetFrames("dots"),
+        .frames = actus.Spinner.presetFrames("z_arrow"),
         .text_animation = actus.Spinner.presetTextAnimation("dots", "Processing"),
         .spinner_style = actus.Style.fg(.green),
     });

@@ -22,7 +22,7 @@ pub const Config = struct {
     spinner_style: ?Style = null,
     /// Animation frames (sequence of characters).
     /// Use presetFrames() for common patterns.
-    frames: []const []const u8 = &.{ "|", "/", "-", "\\" },
+    frames: []const []const u8 = &.{ "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" },
     /// Text animation pattern (optional).
     /// Use presetTextAnimation() for common effects.
     text_animation: ?TextAnimation = null,
@@ -90,8 +90,36 @@ pub fn presetFrames(comptime name: []const u8) []const []const u8 {
         return &.{ "█", "▓", "▒", "░" };
     } else if (std.mem.eql(u8, name, "heavy_blocks")) {
         return &.{ "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏" };
+    } else if (std.mem.eql(u8, name, "dot_cycle")) {
+        return &.{ "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" };
+    } else if (std.mem.eql(u8, name, "dot_cycle_small")) {
+        return &.{ "⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈" };
+    } else if (std.mem.eql(u8, name, "z_arrow")) {
+        return &.{ "←", "↖", "↑", "↗", "→", "↘", "↓", "↙" };
+    } else if (std.mem.eql(u8, name, "z_bar")) {
+        return &.{ "|", "/", "—", "\\" };
+    } else if (std.mem.eql(u8, name, "z_1")) {
+        return &.{ "◰", "◳", "◲", "◱" };
+    } else if (std.mem.eql(u8, name, "z_2")) {
+        return &.{ "◴", "◷", "◶", "◵" };
+    } else if (std.mem.eql(u8, name, "z_3")) {
+        return &.{ "◐", "◓", "◑", "◒" };
+    } else if (std.mem.eql(u8, name, "grow_a")) {
+        return &.{ "|", "b", "O", "b" };
+    } else if (std.mem.eql(u8, name, "grow_b")) {
+        return &.{ "_", "o", "O", "o" };
+    } else if (std.mem.eql(u8, name, "grow_c")) {
+        return &.{ ".", "o", "O", "@", "*", " " };
+    } else if (std.mem.eql(u8, name, "grow_d")) {
+        return &.{ "▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃" };
+    } else if (std.mem.eql(u8, name, "grow_e")) {
+        return &.{ "▉", "▊", "▋", "▌", "▍", "▎", "▏", "▎", "▍", "▌", "▋", "▊", "▉" };
+    } else if (std.mem.eql(u8, name, "y_d")) {
+        return &.{ "d", "|", "b", "|" };
+    } else if (std.mem.eql(u8, name, "y_q")) {
+        return &.{ "q", "|", "p", "|" };
     } else {
-        return &.{ "|", "/", "-", "\\" }; // Default
+        return &.{ "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" }; // Default: dot_cycle
     }
 }
 
@@ -223,6 +251,16 @@ test "presetFrames returns correct patterns" {
     try std.testing.expectEqual(@as(usize, 3), Spinner.presetFrames("dots").len);
     try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames("pipes").len);
     try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames("blocks").len);
+
+    // New presets
+    try std.testing.expectEqual(@as(usize, 8), Spinner.presetFrames("dot_cycle").len);
+    try std.testing.expectEqual(@as(usize, 8), Spinner.presetFrames("z_arrow").len);
+    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames("z_1").len);
+
+    // Default should be dot_cycle
+    const default = Spinner.presetFrames("invalid");
+    try std.testing.expectEqual(@as(usize, 8), default.len);
+    try std.testing.expectEqualStrings("⣾", default[0]);
 }
 
 test "presetTextAnimation returns correct types" {
