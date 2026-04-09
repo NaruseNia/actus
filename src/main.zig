@@ -7,6 +7,10 @@ const demos = [_][]const u8{
     "ListView",
     "ListView (filterable)",
     "FilePicker",
+    "Spinner (basic)",
+    "Spinner (animated)",
+    "ProgressBar (basic)",
+    "ProgressBar (with ETA)",
 };
 
 pub fn main() !void {
@@ -60,6 +64,10 @@ pub fn main() !void {
             .filter_placeholder = "Type to filter...",
         }),
         4 => try runFilePickerDemo(allocator, stdout),
+        5 => try runSpinnerDemo(allocator, stdout),
+        6 => try runSpinnerAnimatedDemo(allocator, stdout),
+        7 => try runProgressBarDemo(allocator, stdout),
+        8 => try runProgressBarETADemo(allocator, stdout),
         else => {},
     }
 }
@@ -155,4 +163,84 @@ fn runFilePickerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
         try stdout.writeAll(path);
         try stdout.writeAll("\n");
     }
+}
+
+fn runSpinnerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
+    var spinner = actus.Spinner.init(allocator, .{
+        .text = "Loading...",
+        .frames = actus.Spinner.presetFrames("pipes"),
+    });
+    defer spinner.deinit();
+
+    var app = try actus.App.init();
+    errdefer app.deinit();
+    // Run for ~2 seconds (20 iterations * 100ms)
+    try app.runProgress(&spinner, 100, 20);
+    app.deinit();
+
+    try stdout.writeAll("Done!\n");
+}
+
+fn runSpinnerAnimatedDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
+    var spinner = actus.Spinner.init(allocator, .{
+        .text = "Processing",
+        .frames = actus.Spinner.presetFrames("dots"),
+        .text_animation = actus.Spinner.presetTextAnimation("dots", "Processing"),
+        .spinner_style = actus.Style.fg(.green),
+    });
+    defer spinner.deinit();
+
+    var app = try actus.App.init();
+    errdefer app.deinit();
+    // Run for ~3 seconds (30 iterations * 100ms)
+    try app.runProgress(&spinner, 100, 30);
+    app.deinit();
+
+    try stdout.writeAll("Complete!\n");
+}
+
+fn runProgressBarDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
+    var progress = actus.ProgressBar.init(allocator, .{
+        .total = 100,
+        .width = 40,
+        .bar_style = .blocks,
+        .format = "{p}%",
+    });
+    defer progress.deinit();
+
+    var app = try actus.App.init();
+    errdefer app.deinit();
+
+    // Simulate progress: 1 iteration per update
+    for (0..101) |i| {
+        progress.update(i);
+        try app.runProgress(&progress, 50, 1); // 50ms per frame, 1 iteration
+    }
+    app.deinit();
+
+    try stdout.writeAll("\n");
+}
+
+fn runProgressBarETADemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
+    var progress = actus.ProgressBar.init(allocator, .{
+        .total = 100,
+        .width = 40,
+        .bar_style = .heavy,
+        .format = "{p}% ({c}/{t})",
+        .show_elapsed = true,
+        .show_eta = true,
+    });
+    defer progress.deinit();
+
+    var app = try actus.App.init();
+    errdefer app.deinit();
+
+    // Simulate progress with delay to show ETA
+    for (0..101) |i| {
+        progress.update(i);
+        try app.runProgress(&progress, 100, 1); // 100ms per frame, 1 iteration
+    }
+    app.deinit();
+
+    try stdout.writeAll("\n");
 }

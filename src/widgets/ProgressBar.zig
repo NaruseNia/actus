@@ -241,12 +241,12 @@ fn formatProgress(self: *ProgressBar, frac: f64) ![]const u8 {
     return self.fmt_buf.items;
 }
 
-fn renderElapsed(self: *const ProgressBar, writer: anytype) !void {
+fn renderElapsed(self: *ProgressBar, writer: anytype) !void {
     const elapsed_ms = std.time.milliTimestamp() - self.start_time;
     try writer.writeAll(self.formatDuration(elapsed_ms));
 }
 
-fn renderETA(self: *const ProgressBar, writer: anytype, frac: f64) !void {
+fn renderETA(self: *ProgressBar, writer: anytype, frac: f64) !void {
     if (frac <= 0) {
         try writer.writeAll("--:--");
         return;
@@ -264,10 +264,10 @@ fn renderETA(self: *const ProgressBar, writer: anytype, frac: f64) !void {
     try writer.writeAll(self.formatDuration(eta_ms));
 }
 
-fn formatDuration(self: *const ProgressBar, ms: i64) []const u8 {
-    const seconds = @max(0, ms / 1000);
-    const mins = @min(99, seconds / 60);
-    const secs = seconds % 60;
+fn formatDuration(self: *ProgressBar, ms: i64) []const u8 {
+    const seconds = @max(0, @divTrunc(ms, 1000));
+    const mins = @min(99, @divTrunc(seconds, 60));
+    const secs = @mod(seconds, 60);
 
     // Reuse fmt_buf for duration formatting
     self.fmt_buf.clearRetainingCapacity();

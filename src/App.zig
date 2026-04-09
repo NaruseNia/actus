@@ -6,6 +6,8 @@ const Event = @import("event.zig").Event;
 const Widget = @import("Widget.zig");
 const layout = @import("layout.zig");
 
+const is_windows = builtin.os.tag == .windows;
+
 const App = @This();
 
 terminal: Terminal,
@@ -175,10 +177,12 @@ pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations:
     fbs.reset();
 
     // Check if widget is single-line (for cursor control)
-    const is_single_line = comptime if (@hasDecl(@TypeOf(widget.*), "isSingleLine"))
-        @TypeOf(widget.*).isSingleLine
-    else
-        false;
+    const is_single_line = comptime blk: {
+        if (@hasDecl(@TypeOf(widget.*), "isSingleLine")) {
+            break :blk true;
+        }
+        break :blk false;
+    };
 
     while (self.running) {
         // Check for safety limit
@@ -218,8 +222,15 @@ pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations:
             try self.writeToStdout("\r");
         }
 
-        // Wait before next frame
-        std.time.sleep(timeout_ms * 1_000_000); // ms to ns
+        // Wait before next frame (platform-specific sleep)
+        if (is_windows) {
+            std.os.windows.kernel32.Sleep(@intCast(timeout_ms));
+        } else {
+            const ns = timeout_ms * 1_000_000;
+            const seconds = ns / 1_000_000_000;
+            const nanoseconds = ns % 1_000_000_000;
+            std.posix.nanosleep(seconds, nanoseconds);
+        }
     }
 
     // Final newline so the shell prompt doesn't overlap

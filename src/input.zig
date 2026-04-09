@@ -41,7 +41,15 @@ pub fn readEventTimeout(handle: Handle, timeout_ms: u64) ReadError!?Event {
         }
         const now = std.time.milliTimestamp();
         if (now >= start + timeout_ms) return null;
-        std.time.sleep(10_000); // 10ms polling
+        // Sleep for 10ms (platform-specific)
+        if (is_windows) {
+            std.os.windows.kernel32.Sleep(10);
+        } else {
+            const ns = 10_000_000;
+            const seconds = ns / 1_000_000_000;
+            const nanoseconds = ns % 1_000_000_000;
+            std.posix.nanosleep(seconds, nanoseconds);
+        }
     }
 }
 
@@ -55,7 +63,8 @@ fn hasInputPosix(fd: std.posix.fd_t) bool {
             .revents = 0,
         },
     };
-    return std.posix.poll(&fds, 0) == 1; // 0 timeout = non-blocking
+    const result = std.posix.poll(&fds, 0) catch return false; // 0 timeout = non-blocking
+    return result == 1;
 }
 
 fn hasInputWindows(handle: std.os.windows.HANDLE) bool {
