@@ -30,6 +30,29 @@ pub const Config = struct {
     theme: Theme = Theme.default,
 };
 
+pub const Preset = enum {
+    dots,
+    pipes,
+    arrows,
+    blocks,
+    heavy_blocks,
+    dot_cycle,
+    dot_cycle_small,
+    dot_rand,
+    z_arrow,
+    z_bar,
+    z_1,
+    z_2,
+    z_3,
+    grow_a,
+    grow_b,
+    grow_c,
+    grow_d,
+    grow_e,
+    y_d,
+    y_q,
+};
+
 pub const TextAnimation = union(enum) {
     /// Dots flow: "Loading..." → "Loading.." → "Loading."
     dots: struct { base: []const u8, max_dots: usize = 3 },
@@ -78,63 +101,50 @@ pub fn isSingleLine() bool {
     return true;
 }
 
-/// Get preset frame patterns by name.
-pub fn presetFrames(comptime name: []const u8) []const []const u8 {
-    if (std.mem.eql(u8, name, "dots")) {
-        return &.{ "...", "..", "." };
-    } else if (std.mem.eql(u8, name, "pipes")) {
-        return &.{ "|", "/", "-", "\\" };
-    } else if (std.mem.eql(u8, name, "arrows")) {
-        return &.{ "→", "↘", "↓", "↙", "←", "↖", "↑", "↗" };
-    } else if (std.mem.eql(u8, name, "blocks")) {
-        return &.{ "█", "▓", "▒", "░" };
-    } else if (std.mem.eql(u8, name, "heavy_blocks")) {
-        return &.{ "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏" };
-    } else if (std.mem.eql(u8, name, "dot_cycle")) {
-        return &.{ "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" };
-    } else if (std.mem.eql(u8, name, "dot_cycle_small")) {
-        return &.{ "⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈" };
-    } else if (std.mem.eql(u8, name, "z_arrow")) {
-        return &.{ "←", "↖", "↑", "↗", "→", "↘", "↓", "↙" };
-    } else if (std.mem.eql(u8, name, "z_bar")) {
-        return &.{ "|", "/", "—", "\\" };
-    } else if (std.mem.eql(u8, name, "z_1")) {
-        return &.{ "◰", "◳", "◲", "◱" };
-    } else if (std.mem.eql(u8, name, "z_2")) {
-        return &.{ "◴", "◷", "◶", "◵" };
-    } else if (std.mem.eql(u8, name, "z_3")) {
-        return &.{ "◐", "◓", "◑", "◒" };
-    } else if (std.mem.eql(u8, name, "grow_a")) {
-        return &.{ "|", "b", "O", "b" };
-    } else if (std.mem.eql(u8, name, "grow_b")) {
-        return &.{ "_", "o", "O", "o" };
-    } else if (std.mem.eql(u8, name, "grow_c")) {
-        return &.{ ".", "o", "O", "@", "*", " " };
-    } else if (std.mem.eql(u8, name, "grow_d")) {
-        return &.{ "▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃" };
-    } else if (std.mem.eql(u8, name, "grow_e")) {
-        return &.{ "▉", "▊", "▋", "▌", "▍", "▎", "▏", "▎", "▍", "▌", "▋", "▊", "▉" };
-    } else if (std.mem.eql(u8, name, "y_d")) {
-        return &.{ "d", "|", "b", "|" };
-    } else if (std.mem.eql(u8, name, "y_q")) {
-        return &.{ "q", "|", "p", "|" };
-    } else {
-        return &.{ "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" }; // Default: dot_cycle
-    }
+/// Get preset frame patterns by enum.
+pub fn presetFrames(comptime preset: Preset) []const []const u8 {
+    return switch (preset) {
+        .dots => &.{ "...", "..", "." },
+        .pipes => &.{ "|", "/", "-", "\\" },
+        .arrows => &.{ "→", "↘", "↓", "↙", "←", "↖", "↑", "↗" },
+        .blocks => &.{ "█", "▓", "▒", "░" },
+        .heavy_blocks => &.{ "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏" },
+        .dot_cycle => &.{ "⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷" },
+        .dot_cycle_small => &.{ "⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈" },
+        .dot_rand => &dot_rand_braille,
+        .z_arrow => &.{ "←", "↖", "↑", "↗", "→", "↘", "↓", "↙" },
+        .z_bar => &.{ "|", "/", "—", "\\" },
+        .z_1 => &.{ "◰", "◳", "◲", "◱" },
+        .z_2 => &.{ "◴", "◷", "◶", "◵" },
+        .z_3 => &.{ "◐", "◓", "◑", "◒" },
+        .grow_a => &.{ "|", "b", "O", "b" },
+        .grow_b => &.{ "_", "o", "O", "o" },
+        .grow_c => &.{ ".", "o", "O", "@", "*", " " },
+        .grow_d => &.{ "▁", "▃", "▄", "▅", "▆", "▇", "█", "▇", "▆", "▅", "▄", "▃" },
+        .grow_e => &.{ "▉", "▊", "▋", "▌", "▍", "▎", "▏", "▎", "▍", "▌", "▋", "▊", "▉" },
+        .y_d => &.{ "d", "|", "b", "|" },
+        .y_q => &.{ "q", "|", "p", "|" },
+    };
 }
 
-/// Get preset text animation by name.
-pub fn presetTextAnimation(comptime name: []const u8, text: []const u8) ?TextAnimation {
-    if (std.mem.eql(u8, name, "dots")) {
-        return .{ .dots = .{ .base = text, .max_dots = 3 } };
-    } else if (std.mem.eql(u8, name, "bounce")) {
-        return .{ .bounce = .{ .base = text, .char = '=', .width = 3 } };
-    } else if (std.mem.eql(u8, name, "pulse")) {
-        return .{ .pulse = .{ .char = '=', .min = 3, .max = 5 } };
-    } else {
-        return null;
-    }
+// Complete Braille pattern (256 frames) for dot_rand preset
+const dot_rand_braille = [_][]const u8{ "⡀", "⡁", "⡂", "⡃", "⡄", "⡅", "⡆", "⡇", "⡈", "⡉", "⡊", "⡋", "⡌", "⡍", "⡎", "⡏", "⡐", "⡑", "⡒", "⡓", "⡔", "⡕", "⡖", "⡗", "⡘", "⡙", "⡚", "⡛", "⡜", "⡝", "⡞", "⡟", "⡠", "⡡", "⡢", "⡣", "⡤", "⡥", "⡦", "⡧", "⡨", "⡩", "⡪", "⡫", "⡬", "⡭", "⡮", "⡯", "⡰", "⡱", "⡲", "⡳", "⡴", "⡵", "⡶", "⡷", "⡸", "⡹", "⡺", "⡻", "⡼", "⡽", "⡾", "⡿", "⢀", "⢁", "⢂", "⢃", "⢄", "⢅", "⢆", "⢇", "⢈", "⢉", "⢋", "⢌", "⢍", "⢎", "⢏", "⢐", "⢑", "⢒", "⢓", "⢔", "⢕", "⢖", "⢗", "⢘", "⢙", "⢚", "⢛", "⢜", "⢝", "⢞", "⢟", "⢠", "⢡", "⢢", "⢣", "⢤", "⢥", "⢦", "⢧", "⢨", "⢩", "⢪", "⢫", "⢬", "⢭", "⢮", "⢯", "⢰", "⢱", "⢲", "⢳", "⢴", "⢵", "⢶", "⢷", "⢸", "⢹", "⢺", "⢻", "⢼", "⢽", "⢾", "⢿", "⣀", "⣁", "⣂", "⣃", "⣄", "⣅", "⣆", "⣇", "⣈", "⣉", "⣊", "⣋", "⣌", "⣍", "⣎", "⣏", "⣐", "⣑", "⣒", "⣓", "⣔", "⣕", "⣖", "⣗", "⣘", "⣙", "⣚", "⣛", "⣜", "⣝", "⣞", "⣟", "⣠", "⣡", "⣢", "⣣", "⣤", "⣥", "⣦", "⣧", "⣨", "⣩", "⣪", "⣫", "⣬", "⣭", "⣮", "⣯", "⣰", "⣱", "⣲", "⣳", "⣴", "⣵", "⣶", "⣷", "⣸", "⣹", "⣺", "⣻", "⣼", "⣽", "⣾", "⣿" };
+
+/// Get preset text animation by enum.
+/// Returns null if the animation preset doesn't exist.
+pub fn presetTextAnimation(comptime anim: TextAnimPreset, text: []const u8) ?TextAnimation {
+    return switch (anim) {
+        .dots => .{ .dots = .{ .base = text, .max_dots = 3 } },
+        .bounce => .{ .bounce = .{ .base = text, .char = '=', .width = 3 } },
+        .pulse => .{ .pulse = .{ .char = '=', .min = 3, .max = 5 } },
+    };
 }
+
+pub const TextAnimPreset = enum {
+    dots,
+    bounce,
+    pulse,
+};
 
 // -- Widget interface --
 
@@ -248,30 +258,31 @@ test "render contains frame and text" {
 }
 
 test "presetFrames returns correct patterns" {
-    try std.testing.expectEqual(@as(usize, 3), Spinner.presetFrames("dots").len);
-    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames("pipes").len);
-    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames("blocks").len);
+    try std.testing.expectEqual(@as(usize, 3), Spinner.presetFrames(.dots).len);
+    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames(.pipes).len);
+    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames(.blocks).len);
 
     // New presets
-    try std.testing.expectEqual(@as(usize, 8), Spinner.presetFrames("dot_cycle").len);
-    try std.testing.expectEqual(@as(usize, 8), Spinner.presetFrames("z_arrow").len);
-    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames("z_1").len);
+    try std.testing.expectEqual(@as(usize, 8), Spinner.presetFrames(.dot_cycle).len);
+    try std.testing.expectEqual(@as(usize, 8), Spinner.presetFrames(.z_arrow).len);
+    try std.testing.expectEqual(@as(usize, 4), Spinner.presetFrames(.z_1).len);
 
-    // Default should be dot_cycle
-    const default = Spinner.presetFrames("invalid");
-    try std.testing.expectEqual(@as(usize, 8), default.len);
-    try std.testing.expectEqualStrings("⣾", default[0]);
+    // dot_rand has Braille pattern frames
+    try std.testing.expect(Spinner.presetFrames(.dot_rand).len > 0);
 }
 
 test "presetTextAnimation returns correct types" {
-    const anim_dots = Spinner.presetTextAnimation("dots", "Loading");
+    const anim_dots = Spinner.presetTextAnimation(.dots, "Loading");
     try std.testing.expect(anim_dots != null);
+    try std.testing.expectEqualStrings("Loading", anim_dots.?.dots.base);
 
-    const anim_bounce = Spinner.presetTextAnimation("bounce", "Processing");
+    const anim_bounce = Spinner.presetTextAnimation(.bounce, "Processing");
     try std.testing.expect(anim_bounce != null);
+    try std.testing.expectEqualStrings("Processing", anim_bounce.?.bounce.base);
 
-    const anim_invalid = Spinner.presetTextAnimation("invalid", "Test");
-    try std.testing.expect(anim_invalid == null);
+    const anim_pulse = Spinner.presetTextAnimation(.pulse, "Test");
+    try std.testing.expect(anim_pulse != null);
+    try std.testing.expectEqual(@as(u8, '='), anim_pulse.?.pulse.char);
 }
 
 test "isSingleLine returns true" {

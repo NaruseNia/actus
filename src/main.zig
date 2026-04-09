@@ -9,7 +9,7 @@ const demos = [_][]const u8{
     "ListView (filterable)",
     "FilePicker",
     "Spinner (basic)",
-    "Spinner (animated)",
+    "Spinner (another)",
     "ProgressBar (basic)",
     "ProgressBar (with ETA)",
 };
@@ -66,7 +66,7 @@ pub fn main() !void {
         }),
         4 => try runFilePickerDemo(allocator, stdout),
         5 => try runSpinnerDemo(allocator, stdout),
-        6 => try runSpinnerAnimatedDemo(allocator, stdout),
+        6 => try runSpinnerAnotherDemo(allocator, stdout),
         7 => try runProgressBarDemo(allocator, stdout),
         8 => try runProgressBarETADemo(allocator, stdout),
         else => {},
@@ -182,11 +182,11 @@ fn runSpinnerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     try stdout.writeAll("Done!\n");
 }
 
-fn runSpinnerAnimatedDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
+fn runSpinnerAnotherDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     var spinner = actus.Spinner.init(allocator, .{
         .text = "Processing",
-        .frames = actus.Spinner.presetFrames("z_arrow"),
-        .text_animation = actus.Spinner.presetTextAnimation("dots", "Processing"),
+        .frames = actus.Spinner.presetFrames(.dot_rand),
+        .text_animation = actus.Spinner.presetTextAnimation(.dots, "Processing"),
         .spinner_style = actus.Style.fg(.green),
     });
     defer spinner.deinit();
