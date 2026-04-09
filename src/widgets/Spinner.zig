@@ -206,7 +206,12 @@ fn applyTextAnimation(self: *Spinner, anim: TextAnimation) ![]const u8 {
         },
         .pulse => |cfg| {
             const range = cfg.max - cfg.min;
-            const len = cfg.min + @abs(@mod(self.anim_step, range * 2) - range);
+            // Avoid overflow by computing mod in two steps
+            const step_in_range = @mod(self.anim_step, range);
+            const double_step = step_in_range * 2;
+            // If double_step >= range, we're in the second half of the cycle
+            const effective_step = if (double_step >= range) double_step - range else double_step;
+            const len = cfg.min + @abs(@as(isize, @intCast(effective_step)) - @as(isize, @intCast(range)));
             for (0..len) |_| {
                 try self.anim_buf.append(self.allocator, cfg.char);
             }
