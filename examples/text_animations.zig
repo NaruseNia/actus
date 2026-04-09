@@ -44,18 +44,38 @@ pub fn main() !void {
             .text = "Processing",
             .text_animation = .{ .pulse = .{
                 .base = "Processing",
+                .text_style = actus.Style.fg(.white).setDim(),
                 .highlight_style = actus.Style.fg(.green).setBold(),
             }},
             .frames = Spinner.presetFrames(.dot_cycle),
             .spinner_style = actus.Style.fg(.cyan),
-            .text_style = actus.Style.fg(.white).dim(),
         });
         defer spinner.deinit();
 
         try app.runProgress(&spinner, 50, null);
     }
 
-    // Demo 3: Flow with custom width and style
+    // Demo 3: Flow with dim base and bright highlight
+    std.debug.print("\n=== Flow Animation (Dim Base, Bright Highlight) ===\n", .{});
+    std.debug.print("Press Ctrl+C to continue to next demo\n", .{});
+    {
+        var spinner = Spinner.init(allocator, .{
+            .text = "Computing",
+            .text_animation = .{ .flow = .{
+                .base = "Computing",
+                .width = 4,
+                .text_style = actus.Style.fg(.cyan).setDim(),
+                .highlight_style = actus.Style.fg(.white).setBold(),
+            }},
+            .frames = Spinner.presetFrames(.dot_cycle),
+            .spinner_style = actus.Style.fg(.blue),
+        });
+        defer spinner.deinit();
+
+        try app.runProgress(&spinner, 50, null);
+    }
+
+    // Demo 4: Flow with custom width and style
     std.debug.print("\n=== Flow Animation (Wide Highlight) ===\n", .{});
     std.debug.print("Press Ctrl+C to exit\n", .{});
     {
@@ -64,11 +84,11 @@ pub fn main() !void {
             .text_animation = .{ .flow = .{
                 .base = "Analyzing data",
                 .width = 8,
+                .text_style = actus.Style.fg(.cyan),
                 .highlight_style = actus.Style.fg(.magenta).setBold(),
             }},
             .frames = Spinner.presetFrames(.dot_cycle),
             .spinner_style = actus.Style.fg(.green),
-            .text_style = actus.Style.fg(.cyan),
         });
         defer spinner.deinit();
 

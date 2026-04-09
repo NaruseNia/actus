@@ -61,9 +61,18 @@ pub const TextAnimation = union(enum) {
     bounce: struct { base: []const u8, char: u8 = '.', width: usize = 3 },
     /// Flow: Highlight flows from left to right across the text
     /// Similar to Claude Code's "pondering..." animation
-    flow: struct { base: []const u8, width: usize = 3, highlight_style: ?Style = null },
+    flow: struct {
+        base: []const u8,
+        width: usize = 3,
+        text_style: ?Style = null,
+        highlight_style: ?Style = null,
+    },
     /// Pulse: Entire text slowly fades in and out
-    pulse: struct { base: []const u8, highlight_style: ?Style = null },
+    pulse: struct {
+        base: []const u8,
+        text_style: ?Style = null,
+        highlight_style: ?Style = null,
+    },
 };
 
 // -- State --
@@ -142,8 +151,8 @@ pub fn presetTextAnimation(comptime anim: TextAnimPreset, text: []const u8) ?Tex
     return switch (anim) {
         .dots => .{ .dots = .{ .base = text, .max_dots = 3 } },
         .bounce => .{ .bounce = .{ .base = text, .char = '.', .width = 3 } },
-        .flow => .{ .flow = .{ .base = text, .width = 3, .highlight_style = null } },
-        .pulse => .{ .pulse = .{ .base = text, .highlight_style = null } },
+        .flow => .{ .flow = .{ .base = text, .width = 3, .text_style = null, .highlight_style = null } },
+        .pulse => .{ .pulse = .{ .base = text, .text_style = null, .highlight_style = null } },
     };
 }
 
@@ -180,7 +189,7 @@ pub fn render(self: *Spinner, writer: anytype) !void {
         // Apply animation-specific rendering
         switch (anim) {
             .flow => |cfg| {
-                const base_style = self.config.text_style orelse self.config.theme.text;
+                const base_style = cfg.text_style orelse self.config.text_style orelse self.config.theme.text;
                 const highlight = cfg.highlight_style orelse self.config.theme.accent;
 
                 // Calculate highlight position (flowing left to right)
@@ -199,7 +208,7 @@ pub fn render(self: *Spinner, writer: anytype) !void {
                 }
             },
             .pulse => |cfg| {
-                const base_style = self.config.text_style orelse self.config.theme.text;
+                const base_style = cfg.text_style orelse self.config.text_style orelse self.config.theme.text;
                 const highlight = cfg.highlight_style orelse self.config.theme.accent;
 
                 // Calculate pulse intensity (sine wave for smooth fading)
@@ -368,7 +377,7 @@ test "needsRender always returns true" {
 test "flow animation renders correctly" {
     const allocator = std.testing.allocator;
     var spinner = Spinner.init(allocator, .{
-        .text_animation = .{ .flow = .{ .base = "Test", .width = 2, .highlight_style = null } },
+        .text_animation = .{ .flow = .{ .base = "Test", .width = 2, .text_style = null, .highlight_style = null } },
         .frames = &.{ "|" },
     });
     defer spinner.deinit();
@@ -389,7 +398,7 @@ test "flow animation renders correctly" {
 test "pulse animation renders correctly" {
     const allocator = std.testing.allocator;
     var spinner = Spinner.init(allocator, .{
-        .text_animation = .{ .pulse = .{ .base = "Pulse", .highlight_style = null } },
+        .text_animation = .{ .pulse = .{ .base = "Pulse", .text_style = null, .highlight_style = null } },
         .frames = &.{ "|" },
     });
     defer spinner.deinit();
@@ -405,4 +414,49 @@ test "pulse animation renders correctly" {
     // Verify that animation advances
     try std.testing.expect(spinner.current_frame == 0); // Only 1 frame
     try std.testing.expect(spinner.anim_step > 0);
+}
+
+test "flow and pulse with custom text_style" {
+    const allocator = std.testing.allocator;
+    var spinner = Spinner.init(allocator, .{
+        .text_animation = .{ .flow = .{
+            .base = "Styled",
+            .width = 2,
+            .text_style = Style.fg(.red),
+            .highlight_style = Style.fg(.yellow),
+        }},
+        .frames = &.{ "|" },
+    });
+    defer spinner.deinit();
+
+    // Render multiple times to verify animation works with custom styles
+    for (0..5) |_| {
+        var buf: [256]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try spinner.render(fbs.writer());
+        spinner.tick();
+    }
+
+    // Verify that animation advances
+    try std.testing.expect(spinner.anim_step > 0);
+
+    // Test pulse with custom styles
+    var spinner2 = Spinner.init(allocator, .{
+        .text_animation = .{ .pulse = .{
+            .base = "Pulse",
+            .text_style = Style.fg(.blue).setDim(),
+            .highlight_style = Style.fg(.green).setBold(),
+        }},
+        .frames = &.{ "|" },
+    });
+    defer spinner2.deinit();
+
+    for (0..5) |_| {
+        var buf: [256]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        try spinner2.render(fbs.writer());
+        spinner2.tick();
+    }
+
+    try std.testing.expect(spinner2.anim_step > 0);
 }
