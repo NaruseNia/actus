@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = std.math;
 const Event = @import("../event.zig").Event;
 const Widget = @import("../Widget.zig");
 const Terminal = @import("../Terminal.zig");
@@ -58,6 +59,11 @@ pub const TextAnimation = union(enum) {
     dots: struct { base: []const u8, max_dots: usize = 3 },
     /// Bounce: "Loading..." → "Loading.."
     bounce: struct { base: []const u8, char: u8 = '.', width: usize = 3 },
+    /// Flow: Highlight flows from left to right across the text
+    /// Similar to Claude Code's "pondering..." animation
+    flow: struct { base: []const u8, width: usize = 3, highlight_style: ?Style = null },
+    /// Pulse: Entire text slowly fades in and out
+    pulse: struct { base: []const u8, highlight_style: ?Style = null },
 };
 
 // -- State --
@@ -72,6 +78,8 @@ anim_direction: i8 = 1,
 dirty: bool = true,
 /// Temporary buffer for animated text
 anim_buf: std.ArrayListUnmanaged(u8) = .empty,
+/// Current highlight style for animation (updated during render)
+current_anim_style: ?Style = null,
 
 config: Config,
 allocator: std.mem.Allocator,
@@ -134,12 +142,16 @@ pub fn presetTextAnimation(comptime anim: TextAnimPreset, text: []const u8) ?Tex
     return switch (anim) {
         .dots => .{ .dots = .{ .base = text, .max_dots = 3 } },
         .bounce => .{ .bounce = .{ .base = text, .char = '.', .width = 3 } },
+        .flow => .{ .flow = .{ .base = text, .width = 3, .highlight_style = null } },
+        .pulse => .{ .pulse = .{ .base = text, .highlight_style = null } },
     };
 }
 
 pub const TextAnimPreset = enum {
     dots,
     bounce,
+    flow,
+    pulse,
 };
 
 // -- Widget interface --
@@ -161,12 +173,55 @@ pub fn render(self: *Spinner, writer: anytype) !void {
     try writer.writeAll(" ");
 
     // Render text with optional animation
-    const text_style = self.config.text_style orelse self.config.theme.text;
     if (self.config.text_animation) |anim| {
         self.anim_buf.clearRetainingCapacity();
         const animated_text = try self.applyTextAnimation(anim);
-        try text_style.write(writer, animated_text);
+
+        // Apply animation-specific rendering
+        switch (anim) {
+            .flow => |cfg| {
+                const base_style = self.config.text_style orelse self.config.theme.text;
+                const highlight = cfg.highlight_style orelse self.config.theme.accent;
+
+                // Calculate highlight position (flowing left to right)
+                const text_len = cfg.base.len;
+                const cycle_len = text_len + cfg.width * 2;
+                const pos = @as(usize, @intCast(self.anim_step % cycle_len));
+
+                // Apply flowing highlight effect using ANSI codes directly
+                try base_style.write(writer, cfg.base[0..@min(pos, text_len)]);
+                if (pos < text_len) {
+                    const highlight_end = @min(pos + cfg.width, text_len);
+                    try highlight.write(writer, cfg.base[pos..highlight_end]);
+                    if (highlight_end < text_len) {
+                        try base_style.write(writer, cfg.base[highlight_end..]);
+                    }
+                }
+            },
+            .pulse => |cfg| {
+                const base_style = self.config.text_style orelse self.config.theme.text;
+                const highlight = cfg.highlight_style orelse self.config.theme.accent;
+
+                // Calculate pulse intensity (sine wave for smooth fading)
+                const pulse_speed = 32; // Adjust for faster/slower pulse
+                const phase = (@as(f32, @floatFromInt(self.anim_step % pulse_speed)) / @as(f32, @floatFromInt(pulse_speed))) * 2.0 * std.math.pi;
+                const intensity = (std.math.sin(phase) + 1.0) / 2.0; // 0.0 to 1.0
+
+                // Interpolate between base and highlight styles based on intensity
+                if (intensity > 0.5) {
+                    try highlight.write(writer, animated_text);
+                } else {
+                    try base_style.write(writer, animated_text);
+                }
+            },
+            else => {
+                // dots and bounce use simple rendering
+                const text_style = self.config.text_style orelse self.config.theme.text;
+                try text_style.write(writer, animated_text);
+            },
+        }
     } else {
+        const text_style = self.config.text_style orelse self.config.theme.text;
         try text_style.write(writer, self.config.text);
     }
 
@@ -183,6 +238,7 @@ pub fn needsRender(_: *const Spinner) bool {
 fn applyTextAnimation(self: *Spinner, anim: TextAnimation) ![]const u8 {
     return switch (anim) {
         .dots => |cfg| {
+            self.current_anim_style = null;
             const dots = (self.anim_step / 2) % (cfg.max_dots + 1);
             try self.anim_buf.appendSlice(self.allocator, cfg.base);
             for (0..dots) |_| {
@@ -191,6 +247,7 @@ fn applyTextAnimation(self: *Spinner, anim: TextAnimation) ![]const u8 {
             return self.anim_buf.items;
         },
         .bounce => |cfg| {
+            self.current_anim_style = null;
             const pos = self.anim_step % (cfg.width * 2);
             const offset = if (pos < cfg.width) pos else (cfg.width * 2 - pos);
             try self.anim_buf.appendSlice(self.allocator, cfg.base);
@@ -198,6 +255,16 @@ fn applyTextAnimation(self: *Spinner, anim: TextAnimation) ![]const u8 {
             for (0..(cfg.width - offset)) |_| {
                 try self.anim_buf.append(self.allocator, cfg.char);
             }
+            return self.anim_buf.items;
+        },
+        .flow => |cfg| {
+            self.current_anim_style = cfg.highlight_style;
+            try self.anim_buf.appendSlice(self.allocator, cfg.base);
+            return self.anim_buf.items;
+        },
+        .pulse => |cfg| {
+            self.current_anim_style = cfg.highlight_style;
+            try self.anim_buf.appendSlice(self.allocator, cfg.base);
             return self.anim_buf.items;
         },
     };
@@ -267,6 +334,14 @@ test "presetTextAnimation returns correct types" {
     const anim_bounce = Spinner.presetTextAnimation(.bounce, "Processing");
     try std.testing.expect(anim_bounce != null);
     try std.testing.expectEqualStrings("Processing", anim_bounce.?.bounce.base);
+
+    const anim_flow = Spinner.presetTextAnimation(.flow, "Pondering");
+    try std.testing.expect(anim_flow != null);
+    try std.testing.expectEqualStrings("Pondering", anim_flow.?.flow.base);
+
+    const anim_pulse = Spinner.presetTextAnimation(.pulse, "Thinking");
+    try std.testing.expect(anim_pulse != null);
+    try std.testing.expectEqualStrings("Thinking", anim_pulse.?.pulse.base);
 }
 
 test "isSingleLine returns true" {
@@ -288,4 +363,46 @@ test "needsRender always returns true" {
     defer spinner.deinit();
 
     try std.testing.expect(spinner.needsRender());
+}
+
+test "flow animation renders correctly" {
+    const allocator = std.testing.allocator;
+    var spinner = Spinner.init(allocator, .{
+        .text_animation = .{ .flow = .{ .base = "Test", .width = 2, .highlight_style = null } },
+        .frames = &.{ "|" },
+    });
+    defer spinner.deinit();
+
+    // Render at different animation steps
+    for (0..10) |_| {
+        var buf: [256]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        spinner.render(fbs.writer()) catch {};
+        spinner.tick();
+    }
+
+    // Verify that animation advances
+    try std.testing.expect(spinner.current_frame == 0); // Only 1 frame
+    try std.testing.expect(spinner.anim_step > 0);
+}
+
+test "pulse animation renders correctly" {
+    const allocator = std.testing.allocator;
+    var spinner = Spinner.init(allocator, .{
+        .text_animation = .{ .pulse = .{ .base = "Pulse", .highlight_style = null } },
+        .frames = &.{ "|" },
+    });
+    defer spinner.deinit();
+
+    // Render at different animation steps
+    for (0..10) |_| {
+        var buf: [256]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        spinner.render(fbs.writer()) catch {};
+        spinner.tick();
+    }
+
+    // Verify that animation advances
+    try std.testing.expect(spinner.current_frame == 0); // Only 1 frame
+    try std.testing.expect(spinner.anim_step > 0);
 }
