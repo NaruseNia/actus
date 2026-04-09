@@ -9,6 +9,7 @@
   - [ListView](#listview)
   - [FilePicker](#filepicker)
   - [ProgressBar](#progressbar)
+  - [Spinner](#spinner)
   - [HelpLine](#helpline)
   - [WithHelpLine](#withhelpline)
   - [WithTitle](#withtitle)
@@ -351,6 +352,111 @@ const frac = pb.fraction(); // e.g., 0.42 for 42%
 
 ```
 ████████████████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 50.0% (0:25, 0:25)
+```
+
+---
+
+### Spinner
+
+Animated loading indicator with customizable frame patterns and text animations.
+
+```zig
+var spinner = actus.Spinner.init(allocator, .{
+    .text = "Loading...",
+    .frames = actus.Spinner.presetFrames(.dot_cycle),
+    .text_animation = actus.Spinner.presetTextAnimation(.dots, "Loading"),
+    .theme = actus.Theme.default,
+});
+defer spinner.deinit();
+
+// Manual animation loop
+for (0..100) |_| {
+    const stdout = std.fs.File.stdout();
+    var buf: [actus.Terminal.render_buf_size]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try spinner.render(fbs.writer());
+    try stdout.writeAll(fbs.getWritten());
+
+    std.time.sleep(50_000_000); // 0.05 seconds
+}
+```
+
+**Config options:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `text` | `[]const u8` | `""` | Text displayed next to the spinner |
+| `text_style` | `?Style` | `null` | Override text style (overrides `theme.text`) |
+| `spinner_style` | `?Style` | `null` | Override spinner style (overrides `theme.primary`) |
+| `frames` | `[][]const u8` | dot_cycle | Animation frames (use `presetFrames()` for presets) |
+| `text_animation` | `?TextAnimation` | `null` | Text animation effect |
+| `theme` | `Theme` | `Theme.default` | Fallback theme |
+
+**Frame presets (20+ patterns):**
+
+| Preset | Frames | Style |
+|---|---|---|
+| `.dots` | `...`, `..`, `.` | Minimal dots |
+| `.pipes` | `\|`, `/`, `-`, `\` | Classic rotating line |
+| `.arrows` | `→`, `↘`, `↓`, `↙`, `←`, `↖`, `↑`, `↗` | 8-direction arrow |
+| `.blocks` | `█`, `▓`, `▒`, `░` | Fading blocks |
+| `.heavy_blocks` | `█`, `▉`, `▊`, `▋`, `▌`, `▍`, `▎`, `▏` | Fine-grained fade |
+| `.dot_cycle` | `⣾`, `⣽`, `⣻`, `⢿`, `⡿`, `⣟`, `⣯`, `⣷` | Braille dots (default) |
+| `.dot_cycle_small` | `⠁`, `⠂`, `⠄`, `⡀`, `⢀`, `⠠`, `⠐`, `⠈` | Small Braille dots |
+| `.dot_stack` | 256 Braille pattern frames | Smooth Braille wave |
+| `.z_arrow` | `←`, `↖`, `↑`, `↗`, `→`, `↘`, `↓`, `↙` | Reversed arrow |
+| `.z_bar` | `\|`, `/`, `—`, `\` | Horizontal/vertical bar |
+| `.z_1`, `.z_2`, `.z_3` | Various Unicode frames | Geometric shapes |
+| `.grow_a` through `.grow_e` | Growing/shrinking chars | Organic growth effects |
+| `.y_d`, `.y_q` | `d`, `\|`, `b`, `\|` | Letter-based animation |
+
+**Text animations:**
+
+```zig
+// Dots: "Loading..." → "Loading.." → "Loading." → "Loading..."
+.text_animation = .{ .dots = .{ .base = "Loading", .max_dots = 3 } }
+
+// Bounce: "Loading ===" → "Loading  ==" → "Loading   =" → "Loading  =="
+.text_animation = .{ .bounce = .{ .base = "Loading", .char = '=', .width = 3 } }
+
+// Pulse: "===" → "====" → "=====" → "====" → "==="
+.text_animation = .{ .pulse = .{ .char = '=', .min = 3, .max = 5 } }
+```
+
+**Using preset text animations:**
+
+```zig
+.text_animation = actus.Spinner.presetTextAnimation(.dots, "Loading")
+.text_animation = actus.Spinner.presetTextAnimation(.bounce, "Processing")
+.text_animation = actus.Spinner.presetTextAnimation(.pulse, "Waiting")
+```
+
+**Custom frames:**
+
+```zig
+var spinner = actus.Spinner.init(allocator, .{
+    .text = "Custom",
+    .frames = &.{ "⚄", "⚃", "⚂", "⚁", "⚀" },
+});
+```
+
+**Methods:**
+
+```zig
+// Manually advance to next frame (for testing or manual control)
+spinner.tick();
+```
+
+**Keybindings:**
+
+`Spinner` ignores all keyboard events (returns `.ignored` from `handleEvent`). It is designed for use in manual event loops.
+
+**Example output:**
+
+```
+⣾ Loading...
+⣽ Loading..
+⣻ Loading.
 ```
 
 ---

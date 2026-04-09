@@ -20,6 +20,7 @@ Build interactive CLI applications with composable, reusable widgets. Supports m
 | **ListView** | Scrollable list with selectable items, optional filtering, item count display |
 | **FilePicker** | File/directory browser with navigation, metadata display, filtering, and extension filtering |
 | **ProgressBar** | Animated progress bar with customizable styles, ETA calculation, and elapsed time display |
+| **Spinner** | Animated loading indicator with 20+ preset frame patterns and text animations |
 | **HelpLine** | Read-only key-binding display (typically used via `WithHelpLine`) |
 | **WithHelpLine** | Generic wrapper that adds a help line below any widget |
 | **WithTitle** | Generic wrapper that adds a styled title line above any widget |
@@ -111,6 +112,7 @@ src/
     ListView.zig        -- Scrollable selectable list
     FilePicker.zig      -- File/directory browser
     ProgressBar.zig     -- Animated progress bar
+    Spinner.zig         -- Animated loading indicator
     HelpLine.zig        -- Key-binding display
     WithHelpLine.zig    -- Generic wrapper: help line below widget
     WithTitle.zig       -- Generic wrapper: title above widget
