@@ -56,8 +56,8 @@ pub const Preset = enum {
 pub const TextAnimation = union(enum) {
     /// Dots flow: "Loading..." → "Loading.." → "Loading."
     dots: struct { base: []const u8, max_dots: usize = 3 },
-    /// Bounce: "Loading===" → "Loading  =="
-    bounce: struct { base: []const u8, char: u8 = '=', width: usize = 3 },
+    /// Bounce: "Loading..." → "Loading.."
+    bounce: struct { base: []const u8, char: u8 = '.', width: usize = 3 },
 };
 
 // -- State --
@@ -133,7 +133,7 @@ const dot_stack_braille = [_][]const u8{ "⡀", "⡁", "⡂", "⡃", "⡄", "⡅
 pub fn presetTextAnimation(comptime anim: TextAnimPreset, text: []const u8) ?TextAnimation {
     return switch (anim) {
         .dots => .{ .dots = .{ .base = text, .max_dots = 3 } },
-        .bounce => .{ .bounce = .{ .base = text, .char = '=', .width = 3 } },
+        .bounce => .{ .bounce = .{ .base = text, .char = '.', .width = 3 } },
     };
 }
 
