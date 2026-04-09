@@ -15,6 +15,7 @@ pub const WithTitle = @import("widgets/WithTitle.zig").WithTitle;
 pub const Decorated = @import("widgets/Decorated.zig").Decorated;
 pub const FilePicker = @import("widgets/FilePicker.zig");
 pub const Spinner = @import("widgets/Spinner.zig");
+pub const ProgressBar = @import("widgets/ProgressBar.zig");
 pub const unicode = @import("unicode.zig");
 pub const layout = @import("layout.zig");
 
@@ -35,6 +36,7 @@ test {
     _ = @import("cursor_tracker.zig");
     _ = FilePicker;
     _ = Spinner;
+    _ = ProgressBar;
     _ = unicode;
     _ = layout;
 }
