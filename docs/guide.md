@@ -418,9 +418,6 @@ for (0..100) |_| {
 
 // Bounce: "Loading ===" → "Loading  ==" → "Loading   =" → "Loading  =="
 .text_animation = .{ .bounce = .{ .base = "Loading", .char = '=', .width = 3 } }
-
-// Pulse: "===" → "====" → "=====" → "====" → "==="
-.text_animation = .{ .pulse = .{ .char = '=', .min = 3, .max = 5 } }
 ```
 
 **Using preset text animations:**
@@ -428,7 +425,6 @@ for (0..100) |_| {
 ```zig
 .text_animation = actus.Spinner.presetTextAnimation(.dots, "Loading")
 .text_animation = actus.Spinner.presetTextAnimation(.bounce, "Processing")
-.text_animation = actus.Spinner.presetTextAnimation(.pulse, "Waiting")
 ```
 
 **Custom frames:**

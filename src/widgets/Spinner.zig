@@ -58,8 +58,6 @@ pub const TextAnimation = union(enum) {
     dots: struct { base: []const u8, max_dots: usize = 3 },
     /// Bounce: "Loading===" → "Loading  =="
     bounce: struct { base: []const u8, char: u8 = '=', width: usize = 3 },
-    /// Pulse: "===" → "====" → "=====" → back to "==="
-    pulse: struct { char: u8 = '=', min: usize = 3, max: usize = 5 },
 };
 
 // -- State --
@@ -68,7 +66,7 @@ pub const TextAnimation = union(enum) {
 current_frame: usize = 0,
 /// Current text animation step
 anim_step: usize = 0,
-/// Animation direction (1 or -1) for bounce/pulse
+/// Animation direction (1 or -1) for bounce
 anim_direction: i8 = 1,
 /// Always needs re-render (animates continuously)
 dirty: bool = true,
@@ -136,14 +134,12 @@ pub fn presetTextAnimation(comptime anim: TextAnimPreset, text: []const u8) ?Tex
     return switch (anim) {
         .dots => .{ .dots = .{ .base = text, .max_dots = 3 } },
         .bounce => .{ .bounce = .{ .base = text, .char = '=', .width = 3 } },
-        .pulse => .{ .pulse = .{ .char = '=', .min = 3, .max = 5 } },
     };
 }
 
 pub const TextAnimPreset = enum {
     dots,
     bounce,
-    pulse,
 };
 
 // -- Widget interface --
@@ -200,22 +196,6 @@ fn applyTextAnimation(self: *Spinner, anim: TextAnimation) ![]const u8 {
             try self.anim_buf.appendSlice(self.allocator, cfg.base);
             try self.anim_buf.appendSlice(self.allocator, " ");
             for (0..(cfg.width - offset)) |_| {
-                try self.anim_buf.append(self.allocator, cfg.char);
-            }
-            return self.anim_buf.items;
-        },
-        .pulse => |cfg| {
-            const range = cfg.max - cfg.min;
-            // Create a pulse effect: min -> max -> min
-            // Cycle length is 2 * range, compute mod safely
-            const cycle_pos = @mod(self.anim_step, range);
-            // Use triangle wave: 0 -> range -> 0
-            const offset = if (cycle_pos * 2 >= range)
-                range - cycle_pos
-            else
-                cycle_pos;
-            const len = cfg.min + offset;
-            for (0..len) |_| {
                 try self.anim_buf.append(self.allocator, cfg.char);
             }
             return self.anim_buf.items;
@@ -287,10 +267,6 @@ test "presetTextAnimation returns correct types" {
     const anim_bounce = Spinner.presetTextAnimation(.bounce, "Processing");
     try std.testing.expect(anim_bounce != null);
     try std.testing.expectEqualStrings("Processing", anim_bounce.?.bounce.base);
-
-    const anim_pulse = Spinner.presetTextAnimation(.pulse, "Test");
-    try std.testing.expect(anim_pulse != null);
-    try std.testing.expectEqual(@as(u8, '='), anim_pulse.?.pulse.char);
 }
 
 test "isSingleLine returns true" {

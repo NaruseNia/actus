@@ -185,8 +185,8 @@ fn runSpinnerDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
 fn runSpinnerAnotherDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     var spinner = actus.Spinner.init(allocator, .{
         .text = "Processing",
-        .frames = actus.Spinner.presetFrames(.dot_rand),
-        .text_animation = actus.Spinner.presetTextAnimation(.dots, "Processing"),
+        .frames = actus.Spinner.presetFrames(.dot_cycle_small),
+        .text_animation = actus.Spinner.presetTextAnimation(.pulse, "Processing"),
         .spinner_style = actus.Style.fg(.green),
     });
     defer spinner.deinit();
