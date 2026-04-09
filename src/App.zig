@@ -140,6 +140,92 @@ pub fn runWithHelpLine(self: *App, widget: anytype, help_line: anytype) !void {
     try self.writeToStdout("\r\n");
 }
 
+/// Run a progress widget with timeout-based polling.
+/// Progress widgets (Spinner, ProgressBar) animate continuously and need
+/// periodic re-rendering even when no input is available.
+///
+/// Parameters:
+/// - widget: Any progress widget (Spinner, ProgressBar)
+/// - timeout_ms: Time between animation frames in milliseconds (typically 50-200ms)
+/// - max_iterations: Optional safety limit to prevent infinite loops in tests (null = infinite)
+///
+/// Returns when:
+/// - Widget signals done via HandleResult.done
+/// - User presses Ctrl-C
+/// - max_iterations is reached (if set)
+///
+/// Example:
+/// ```zig
+/// var spinner = actus.Spinner.init(allocator, .{ .text = "Loading..." });
+/// try app.runProgress(&spinner, 100, null); // 100ms per frame, run forever
+/// ```
+pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations: ?usize) !void {
+    comptime Widget.assertIsWidget(@TypeOf(widget.*));
+
+    var buf: [Terminal.render_buf_size]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    const writer = fbs.writer();
+    var iteration: usize = 0;
+
+    // Initial render
+    try Terminal.hideCursor(&writer);
+    try widget.render(&writer);
+    try Terminal.showCursor(&writer);
+    try self.writeToStdout(fbs.getWritten());
+    fbs.reset();
+
+    // Check if widget is single-line (for cursor control)
+    const is_single_line = comptime if (@hasDecl(@TypeOf(widget.*), "isSingleLine"))
+        @TypeOf(widget.*).isSingleLine
+    else
+        false;
+
+    while (self.running) {
+        // Check for safety limit
+        if (max_iterations) |max| {
+            if (iteration >= max) break;
+            iteration += 1;
+        }
+
+        // Non-blocking input check
+        if (input.hasInput(self.terminal.stdin_handle)) {
+            const ev = try input.readEvent(self.terminal.stdin_handle);
+            if (ev) |event| {
+                // Handle Ctrl-C for exit
+                switch (event) {
+                    .key => |key| switch (key) {
+                        .ctrl => |c| if (c == 'c') {
+                            self.running = false;
+                            continue;
+                        },
+                        else => {},
+                    },
+                }
+                const result = widget.handleEvent(event);
+                if (result == .done) break;
+            }
+        }
+
+        // Always re-render progress widgets (they animate)
+        try Terminal.hideCursor(&writer);
+        try widget.render(&writer);
+        try Terminal.showCursor(&writer);
+        try self.writeToStdout(fbs.getWritten());
+        fbs.reset();
+
+        // Return to start of line for single-line widgets
+        if (is_single_line) {
+            try self.writeToStdout("\r");
+        }
+
+        // Wait before next frame
+        std.time.sleep(timeout_ms * 1_000_000); // ms to ns
+    }
+
+    // Final newline so the shell prompt doesn't overlap
+    try self.writeToStdout("\r\n");
+}
+
 fn writeToStdout(_: *const App, bytes: []const u8) !void {
     const stdout = std.fs.File.stdout();
     try stdout.writeAll(bytes);
@@ -170,4 +256,31 @@ const MockWidget = struct {
 
 test "MockWidget satisfies widget interface" {
     comptime Widget.assertIsWidget(MockWidget);
+}
+
+// Progress widget mock for testing runProgress
+const ProgressMockWidget = struct {
+    rendered: bool = false,
+    event_count: usize = 0,
+
+    pub fn handleEvent(self: *ProgressMockWidget, _: Event) Widget.HandleResult {
+        self.event_count += 1;
+        return .consumed;
+    }
+
+    pub fn render(self: *ProgressMockWidget, _: anytype) !void {
+        self.rendered = true;
+    }
+
+    pub fn needsRender(_: *const ProgressMockWidget) bool {
+        return true; // Progress widgets always need render
+    }
+
+    pub fn isSingleLine() bool {
+        return true;
+    }
+};
+
+test "ProgressMockWidget satisfies widget interface" {
+    comptime Widget.assertIsWidget(ProgressMockWidget);
 }
