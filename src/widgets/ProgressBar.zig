@@ -271,9 +271,10 @@ fn formatDuration(self: *ProgressBar, ms: i64) []const u8 {
 
     // Reuse fmt_buf for duration formatting
     self.fmt_buf.clearRetainingCapacity();
-    self.fmt_buf.appendSlice(self.allocator,
-        std.fmt.allocPrint(self.allocator, "{d}:{d:0>2}", .{ mins, secs }) catch "--:--"
-    ) catch {};
+
+    // Format directly into buffer to avoid allocPrint leak
+    const writer = self.fmt_buf.writer(self.allocator);
+    writer.print("{d}:{d:0>2}", .{ mins, secs }) catch return "--:--";
 
     return self.fmt_buf.items;
 }

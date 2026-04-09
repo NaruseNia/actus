@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const actus = @import("actus");
 
 const demos = [_][]const u8{
@@ -211,10 +212,31 @@ fn runProgressBarDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !void {
     var app = try actus.App.init();
     errdefer app.deinit();
 
-    // Simulate progress: 1 iteration per update
-    for (0..101) |i| {
+    // Animate from 0 to 100% over ~5 seconds (50ms * 100 iterations)
+    var i: usize = 0;
+    while (i <= 100) : (i += 1) {
         progress.update(i);
-        try app.runProgress(&progress, 50, 1); // 50ms per frame, 1 iteration
+        // Render current progress
+        var buf: [actus.Terminal.render_buf_size]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        const writer = fbs.writer();
+        try actus.Terminal.hideCursor(&writer);
+        try progress.render(&writer);
+        try actus.Terminal.showCursor(&writer);
+        try stdout.writeAll(fbs.getWritten());
+        // Return to start of line (except for last iteration)
+        if (i < 100) {
+            try stdout.writeAll("\r");
+        }
+        // Small delay to simulate work
+        if (comptime builtin.os.tag == .windows) {
+            std.os.windows.kernel32.Sleep(50);
+        } else {
+            const ns = 50_000_000;
+            const seconds = ns / 1_000_000_000;
+            const nanoseconds = ns % 1_000_000_000;
+            std.posix.nanosleep(seconds, nanoseconds);
+        }
     }
     app.deinit();
 
@@ -235,10 +257,31 @@ fn runProgressBarETADemo(allocator: std.mem.Allocator, stdout: std.fs.File) !voi
     var app = try actus.App.init();
     errdefer app.deinit();
 
-    // Simulate progress with delay to show ETA
-    for (0..101) |i| {
+    // Animate from 0 to 100% over ~10 seconds (100ms * 100 iterations)
+    var i: usize = 0;
+    while (i <= 100) : (i += 1) {
         progress.update(i);
-        try app.runProgress(&progress, 100, 1); // 100ms per frame, 1 iteration
+        // Render current progress
+        var buf: [actus.Terminal.render_buf_size]u8 = undefined;
+        var fbs = std.io.fixedBufferStream(&buf);
+        const writer = fbs.writer();
+        try actus.Terminal.hideCursor(&writer);
+        try progress.render(&writer);
+        try actus.Terminal.showCursor(&writer);
+        try stdout.writeAll(fbs.getWritten());
+        // Return to start of line (except for last iteration)
+        if (i < 100) {
+            try stdout.writeAll("\r");
+        }
+        // Small delay to simulate work
+        if (comptime builtin.os.tag == .windows) {
+            std.os.windows.kernel32.Sleep(100);
+        } else {
+            const ns = 100_000_000;
+            const seconds = ns / 1_000_000_000;
+            const nanoseconds = ns % 1_000_000_000;
+            std.posix.nanosleep(seconds, nanoseconds);
+        }
     }
     app.deinit();
 

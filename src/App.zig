@@ -218,8 +218,12 @@ pub fn runProgress(self: *App, widget: anytype, timeout_ms: u64, max_iterations:
         fbs.reset();
 
         // Return to start of line for single-line widgets
+        // Only use \r if we're going to render again
         if (is_single_line) {
-            try self.writeToStdout("\r");
+            const is_last_iteration = if (max_iterations) |max| iteration >= max - 1 else false;
+            if (!is_last_iteration) {
+                try self.writeToStdout("\r");
+            }
         }
 
         // Wait before next frame (platform-specific sleep)
