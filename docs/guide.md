@@ -8,6 +8,7 @@
   - [TextInput](#textinput)
   - [ListView](#listview)
   - [FilePicker](#filepicker)
+  - [ProgressBar](#progressbar)
   - [HelpLine](#helpline)
   - [WithHelpLine](#withhelpline)
   - [WithTitle](#withtitle)
@@ -258,6 +259,98 @@ if (fp.isCancelled()) {
 // Also available:
 // fp.selectedEntry() -> ?FilePicker.Entry
 // fp.currentPath() -> []const u8
+```
+
+---
+
+### ProgressBar
+
+Animated progress bar with customizable visual styles and time estimation.
+
+```zig
+var pb = actus.ProgressBar.init(allocator, .{
+    .total = 100,              // total value for 100% completion
+    .current = 0,              // initial progress
+    .width = 40,               // bar width in characters
+    .bar_style = .blocks,      // visual style
+    .format = "{p}%",          // display format
+    .show_elapsed = true,      // show elapsed time
+    .show_eta = true,          // show estimated time remaining
+    .theme = actus.Theme.default,
+});
+defer pb.deinit();
+
+// Update progress during a loop
+for (0..100) |i| {
+    pb.update(i);
+
+    const stdout = std.fs.File.stdout();
+    var buf: [actus.Terminal.render_buf_size]u8 = undefined;
+    var fbs = std.io.fixedBufferStream(&buf);
+    try pb.render(fbs.writer());
+    try stdout.writeAll(fbs.getWritten());
+
+    std.time.sleep(10_000_000); // 0.01 seconds
+}
+```
+
+**Config options:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `total` | `u64` | `100` | Total value for completion (100%) |
+| `current` | `u64` | `0` | Initial progress value (0..total) |
+| `width` | `usize` | `40` | Width of the bar in characters |
+| `bar_style` | `BarStyle` | `.blocks` | Visual style (see below) |
+| `custom_chars` | `?BarChars` | `null` | Custom bar characters |
+| `format` | `[]const u8` | `"{p}%"` | Format string for value display |
+| `show_elapsed` | `bool` | `false` | Show elapsed time |
+| `show_eta` | `bool` | `false` | Show estimated time remaining |
+| `bar_style_override` | `?Style` | `null` | Override bar style (overrides `theme.primary`) |
+| `bg_style` | `?Style` | `null` | Override background style (overrides `theme.muted`) |
+| `theme` | `Theme` | `Theme.default` | Fallback theme |
+
+**BarStyle options:**
+
+| Style | Appearance | Description |
+|---|---|---|
+| `.plain` | `===>----` | Simple ASCII arrow style |
+| `.blocks` | `████▒▒▒` | Unicode block characters (default) |
+| `.heavy` | `█████▒▒` | Dark shading blocks |
+| `.double` | `║║║║░░` | Double vertical bars |
+| `.ascii` | `>>>>....` | Plain ASCII characters |
+
+**Format placeholders:**
+
+| Placeholder | Meaning | Example |
+|---|---|---|
+| `{p}` | Percentage (0.0-100.0) | `50.0%` |
+| `{c}` | Current value | `50` |
+| `{t}` | Total value | `100` |
+
+Example: `"{p}% ({c}/{t})"` renders as `"50.0% (50/100)"`
+
+**Methods:**
+
+```zig
+// Update progress to a specific value
+pb.update(42);
+
+// Increment progress by a delta
+pb.increment(5);
+
+// Get completion as fraction (0.0-1.0)
+const frac = pb.fraction(); // e.g., 0.42 for 42%
+```
+
+**Keybindings:**
+
+`ProgressBar` ignores all keyboard events (returns `.ignored` from `handleEvent`). It is designed for use in manual event loops or with `App.runProgress()` if available.
+
+**Example output:**
+
+```
+████████████████████▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒ 50.0% (0:25, 0:25)
 ```
 
 ---
