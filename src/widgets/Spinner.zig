@@ -206,12 +206,15 @@ fn applyTextAnimation(self: *Spinner, anim: TextAnimation) ![]const u8 {
         },
         .pulse => |cfg| {
             const range = cfg.max - cfg.min;
-            // Avoid overflow by computing mod in two steps
-            const step_in_range = @mod(self.anim_step, range);
-            const double_step = step_in_range * 2;
-            // If double_step >= range, we're in the second half of the cycle
-            const effective_step = if (double_step >= range) double_step - range else double_step;
-            const len = cfg.min + @abs(@as(isize, @intCast(effective_step)) - @as(isize, @intCast(range)));
+            // Create a pulse effect: min -> max -> min
+            // Cycle length is 2 * range, compute mod safely
+            const cycle_pos = @mod(self.anim_step, range);
+            // Use triangle wave: 0 -> range -> 0
+            const offset = if (cycle_pos * 2 >= range)
+                range - cycle_pos
+            else
+                cycle_pos;
+            const len = cfg.min + offset;
             for (0..len) |_| {
                 try self.anim_buf.append(self.allocator, cfg.char);
             }
