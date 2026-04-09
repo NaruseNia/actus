@@ -186,7 +186,12 @@ fn runSpinnerAnotherDemo(allocator: std.mem.Allocator, stdout: std.fs.File) !voi
     var spinner = actus.Spinner.init(allocator, .{
         .text = "Processing",
         .frames = actus.Spinner.presetFrames(.dot_cycle_small),
-        .text_animation = actus.Spinner.presetTextAnimation(.bounce, "Processing"),
+        .text_animation = .{ .flow = .{
+            .base = "Processing",
+            .width = 4,
+            .text_style = actus.Style.fgRgb(224, 120, 60),
+            .highlight_style = actus.Style.fgRgb(255, 215, 180),
+        } },
         .spinner_style = actus.Style.fg(.green),
     });
     defer spinner.deinit();

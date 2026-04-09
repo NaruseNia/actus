@@ -151,8 +151,8 @@ pub fn presetTextAnimation(comptime anim: TextAnimPreset, text: []const u8) ?Tex
     return switch (anim) {
         .dots => .{ .dots = .{ .base = text, .max_dots = 3 } },
         .bounce => .{ .bounce = .{ .base = text, .char = '.', .width = 3 } },
-        .flow => .{ .flow = .{ .base = text, .width = 3, .text_style = null, .highlight_style = null } },
-        .pulse => .{ .pulse = .{ .base = text, .text_style = null, .highlight_style = null } },
+        .flow => .{ .flow = .{ .base = text, .width = 4, .text_style = Style.fg(.yellow), .highlight_style = Style.fg(.white) } },
+        .pulse => .{ .pulse = .{ .base = text, .text_style = Style.fg(.bright_black), .highlight_style = Style.fg(.white) } },
     };
 }
 
@@ -212,7 +212,7 @@ pub fn render(self: *Spinner, writer: anytype) !void {
                 const highlight = cfg.highlight_style orelse self.config.theme.accent;
 
                 // Calculate pulse intensity (sine wave for smooth fading)
-                const pulse_speed = 32; // Adjust for faster/slower pulse
+                const pulse_speed = 5; // Adjust for faster/slower pulse
                 const phase = (@as(f32, @floatFromInt(self.anim_step % pulse_speed)) / @as(f32, @floatFromInt(pulse_speed))) * 2.0 * std.math.pi;
                 const intensity = (std.math.sin(phase) + 1.0) / 2.0; // 0.0 to 1.0
 
@@ -378,7 +378,7 @@ test "flow animation renders correctly" {
     const allocator = std.testing.allocator;
     var spinner = Spinner.init(allocator, .{
         .text_animation = .{ .flow = .{ .base = "Test", .width = 2, .text_style = null, .highlight_style = null } },
-        .frames = &.{ "|" },
+        .frames = &.{"|"},
     });
     defer spinner.deinit();
 
@@ -399,7 +399,7 @@ test "pulse animation renders correctly" {
     const allocator = std.testing.allocator;
     var spinner = Spinner.init(allocator, .{
         .text_animation = .{ .pulse = .{ .base = "Pulse", .text_style = null, .highlight_style = null } },
-        .frames = &.{ "|" },
+        .frames = &.{"|"},
     });
     defer spinner.deinit();
 
@@ -424,8 +424,8 @@ test "flow and pulse with custom text_style" {
             .width = 2,
             .text_style = Style.fg(.red),
             .highlight_style = Style.fg(.yellow),
-        }},
-        .frames = &.{ "|" },
+        } },
+        .frames = &.{"|"},
     });
     defer spinner.deinit();
 
@@ -446,8 +446,8 @@ test "flow and pulse with custom text_style" {
             .base = "Pulse",
             .text_style = Style.fg(.blue).setDim(),
             .highlight_style = Style.fg(.green).setBold(),
-        }},
-        .frames = &.{ "|" },
+        } },
+        .frames = &.{"|"},
     });
     defer spinner2.deinit();
 

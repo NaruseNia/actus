@@ -418,14 +418,54 @@ for (0..100) |_| {
 
 // Bounce: "Loading ===" → "Loading  ==" → "Loading   =" → "Loading  =="
 .text_animation = .{ .bounce = .{ .base = "Loading", .char = '=', .width = 3 } }
+
+// Flow: Highlight flows left-to-right (Claude Code-style "pondering...")
+.text_animation = .{ .flow = .{
+    .base = "Pondering",
+    .width = 4,                    // highlight width in characters
+    .text_style = Style.fg(.cyan).setDim(),      // base text style
+    .highlight_style = Style.fg(.white).setBold() // highlight style
+}}
+
+// Pulse: Entire text fades in and out smoothly
+.text_animation = .{ .pulse = .{
+    .base = "Processing",
+    .text_style = Style.fg(.bright_black),       // dim state
+    .highlight_style = Style.fg(.white)          // bright state
+}}
 ```
+
+**Animation details:**
+
+| Animation | Effect | Options |
+|---|---|---|
+| `dots` | Adds/removes dots at end | `base`, `max_dots` |
+| `bounce` | Characters bounce back and forth | `base`, `char`, `width` |
+| `flow` | Highlight flows left-to-right across text | `base`, `width`, `text_style`, `highlight_style` |
+| `pulse` | Entire text fades between two styles | `base`, `text_style`, `highlight_style` |
 
 **Using preset text animations:**
 
 ```zig
 .text_animation = actus.Spinner.presetTextAnimation(.dots, "Loading")
 .text_animation = actus.Spinner.presetTextAnimation(.bounce, "Processing")
+.text_animation = actus.Spinner.presetTextAnimation(.flow, "Pondering")
+.text_animation = actus.Spinner.presetTextAnimation(.pulse, "Thinking")
 ```
+
+Preset animations use sensible defaults:
+- `flow`: 4-char highlight, yellow → white gradient
+- `pulse`: bright_black → white fade
+
+**Style priority for animations:**
+
+When using `flow` or `pulse`, styles are applied in this order:
+
+1. `animation.text_style` (if set)
+2. `config.text_style` (if set)
+3. `theme.text` (fallback)
+
+This allows per-animation customization while maintaining global theming.
 
 **Custom frames:**
 
@@ -453,6 +493,14 @@ spinner.tick();
 ⣾ Loading...
 ⣽ Loading..
 ⣻ Loading.
+
+⣷ Pondering     (flow: highlight moves left → right)
+⣯ Pondering
+⣻ Pondering
+
+⣾ Processing    (pulse: fades bright_black → white → bright_black)
+⣽ Processing
+⣻ Processing
 ```
 
 ---

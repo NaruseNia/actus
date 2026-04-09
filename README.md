@@ -20,7 +20,7 @@ Build interactive CLI applications with composable, reusable widgets. Supports m
 | **ListView** | Scrollable list with selectable items, optional filtering, item count display |
 | **FilePicker** | File/directory browser with navigation, metadata display, filtering, and extension filtering |
 | **ProgressBar** | Animated progress bar with customizable styles, ETA calculation, and elapsed time display |
-| **Spinner** | Animated loading indicator with 20+ preset frame patterns and text animations |
+| **Spinner** | Animated loading indicator with 20+ preset frame patterns and text animations (dots, bounce, flow, pulse) |
 | **HelpLine** | Read-only key-binding display (typically used via `WithHelpLine`) |
 | **WithHelpLine** | Generic wrapper that adds a help line below any widget |
 | **WithTitle** | Generic wrapper that adds a styled title line above any widget |
@@ -90,6 +90,7 @@ See [docs/guide.md](docs/guide.md) for full usage guide and API reference.
 zig build          # Build the library and example executable
 zig build run      # Run the interactive demo selector
 zig build test     # Run all unit tests
+zig run examples/text_animations.zig  # Try Spinner text animations
 ```
 
 ## Architecture
